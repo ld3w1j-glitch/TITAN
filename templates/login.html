@@ -3,6 +3,6 @@
 <p class="muted">Cada pessoa possui alimentos, refeições, fotos e evolução separados.</p>
 <form method="post" class="form"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 <label>E-mail<input type="email" name="email" required autocomplete="email"></label>
-<label>Senha<input type="password" name="password" required autocomplete="current-password"></label><button>Entrar</button></form>
+<label>Senha<input type="password" name="password" required autocomplete="current-password"></label><a class="forgot-link" href="{{ url_for('forgot_password') }}">Esqueci minha senha</a><button>Entrar</button></form>
 <p class="auth-security-note">Se o e-mail de uma conta nova ainda não estiver confirmado, o TITAN abrirá automaticamente a tela do código.</p>
 <p class="auth-switch">Ainda não possui conta? <a href="{{ url_for('register') }}">Criar conta</a></p></section>{% endblock %}

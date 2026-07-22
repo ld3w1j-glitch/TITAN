@@ -1,4 +1,4 @@
-# Projeto TITAN V3.4 — E-mail seguro + Navegação guiada
+# Projeto TITAN V3.5 — Recuperação de senha + E-mail seguro
 
 Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. Ela mantém kcal e macros por alimento e por refeição e acrescenta login, fotos, previsões, análise automática, comparador de mercados, calendário, exercícios com mídia e deploy no Railway.
 
@@ -10,6 +10,15 @@ Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. 
 - a senha precisa ter no mínimo 10 caracteres, maiúscula, minúscula, número e símbolo;
 - senhas contendo nome, início do e-mail ou sequências óbvias são recusadas;
 - contas que já existiam antes desta atualização continuam confirmadas para não bloquear usuários atuais.
+- falhas de configuração ou conexão SMTP são tratadas na tela e não derrubam mais o cadastro com erro 500.
+
+## Recuperação de senha
+- o link **Esqueci minha senha** fica disponível na tela de entrada;
+- o usuário informa o e-mail e recebe um código próprio para redefinição;
+- o código de recuperação não pode ser usado como código de confirmação da conta;
+- a recuperação também expira em 10 minutos, permite 5 tentativas e limita reenvios;
+- a nova senha precisa cumprir a política de segurança e ser diferente da anterior;
+- a resposta é propositalmente igual para e-mails existentes e inexistentes, evitando revelar contas cadastradas.
 
 ## Nova experiência de navegação
 - menu lateral permanente no computador, dividido em **Meu dia**, **Minha rotina**, **Planejar** e **Configurar**;
@@ -40,6 +49,8 @@ Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. 
 5. Gere um domínio público.
 
 Nunca envie o arquivo `.env` ao GitHub. No Railway, cadastre esses valores na área de variáveis do serviço. Se o seu provedor usar a porta 465, configure `SMTP_USE_SSL=true` e `SMTP_USE_TLS=false`.
+
+Se uma conta foi criada durante uma falha de envio de uma versão anterior, não é necessário cadastrá-la novamente: abra **Entrar**, use o mesmo e-mail e a mesma senha e depois selecione **Reenviar código**.
 
 O sistema usa um worker do Gunicorn para reduzir conflitos de escrita no SQLite. Para grande quantidade de usuários, a evolução recomendada é PostgreSQL.
 

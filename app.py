@@ -63,7 +63,10 @@ def add_security_headers(response):
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     if request.is_secure:
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-    if request.endpoint in {"login", "register", "verify_email", "resend_verification"}:
+    if request.endpoint in {
+        "login", "register", "verify_email", "resend_verification",
+        "forgot_password", "reset_password", "resend_password_reset",
+    }:
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -132,6 +135,12 @@ def verification_code_hash(user_id: int, code: str) -> str:
     return hmac.new(key, payload, hashlib.sha256).hexdigest()
 
 
+def password_reset_code_hash(user_id: int, code: str) -> str:
+    key = str(app.secret_key).encode("utf-8")
+    payload = f"password-reset:{user_id}:{code}".encode("utf-8")
+    return hmac.new(key, payload, hashlib.sha256).hexdigest()
+
+
 def issue_verification_code(db: sqlite3.Connection, user_id: int) -> str:
     code = f"{secrets.randbelow(1_000_000):06d}"
     now = utc_now()
@@ -146,11 +155,27 @@ def issue_verification_code(db: sqlite3.Connection, user_id: int) -> str:
     return code
 
 
-def send_verification_email(name: str, email: str, code: str) -> bool:
+def issue_password_reset_code(db: sqlite3.Connection, user_id: int) -> str:
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    now = utc_now()
+    expires = now + timedelta(minutes=VERIFICATION_TTL_MINUTES)
+    db.execute(
+        """INSERT INTO password_resets(user_id,code_hash,expires_at,attempts,last_sent_at)
+           VALUES(?,?,?,?,?)
+           ON CONFLICT(user_id) DO UPDATE SET code_hash=excluded.code_hash,
+           expires_at=excluded.expires_at,attempts=0,last_sent_at=excluded.last_sent_at""",
+        (user_id, password_reset_code_hash(user_id, code), expires.isoformat(), 0, now.isoformat()),
+    )
+    return code
+
+
+def _send_verification_email(name: str, email: str, code: str, purpose: str = "verify") -> bool:
+    is_reset = purpose == "reset"
     default_mode = "smtp" if os.getenv("RAILWAY_ENVIRONMENT") else "console"
     mode = os.getenv("MAIL_MODE", default_mode).strip().lower()
     if mode == "console":
-        app.logger.warning("TITAN DEV — código de confirmação para %s: %s", email, code)
+        label = "recuperação de senha" if is_reset else "confirmação de e-mail"
+        app.logger.warning("TITAN DEV — código de %s para %s: %s", label, email, code)
         return True
     if mode != "smtp":
         app.logger.error("MAIL_MODE inválido. Use 'smtp' ou 'console'.")
@@ -174,23 +199,38 @@ def send_verification_email(name: str, email: str, code: str) -> bool:
         return False
 
     message = EmailMessage()
-    message["Subject"] = f"{code} é seu código de confirmação TITAN"
+    message["Subject"] = (
+        f"{code} é seu código para redefinir a senha TITAN"
+        if is_reset else f"{code} é seu código de confirmação TITAN"
+    )
     message["From"] = f"{from_name} <{from_email}>"
     message["To"] = email
-    message.set_content(
-        f"Olá, {name}!\n\nSeu código de confirmação do Projeto TITAN é: {code}\n\n"
-        f"Ele expira em {VERIFICATION_TTL_MINUTES} minutos. Se você não criou esta conta, ignore este e-mail."
-    )
+    if is_reset:
+        message.set_content(
+            f"Olá, {name}!\n\nSeu código para redefinir a senha do Projeto TITAN é: {code}\n\n"
+            f"Ele expira em {VERIFICATION_TTL_MINUTES} minutos. Se você não solicitou a troca, ignore este e-mail."
+        )
+        email_title = "Redefina sua senha"
+        email_intro = "Use o código abaixo para criar uma nova senha com segurança:"
+        email_warning = "Se você não solicitou a troca de senha, ignore esta mensagem e sua senha continuará igual."
+    else:
+        message.set_content(
+            f"Olá, {name}!\n\nSeu código de confirmação do Projeto TITAN é: {code}\n\n"
+            f"Ele expira em {VERIFICATION_TTL_MINUTES} minutos. Se você não criou esta conta, ignore este e-mail."
+        )
+        email_title = "Confirme seu e-mail"
+        email_intro = "Use o código abaixo para liberar sua conta:"
+        email_warning = "Se você não criou esta conta, ignore esta mensagem."
     safe_name = html_escape(name)
     message.add_alternative(
         f"""<!doctype html><html><body style="margin:0;background:#0b0f15;color:#eef2f6;font-family:Arial,sans-serif">
         <div style="max-width:520px;margin:0 auto;padding:36px 22px">
           <div style="color:#f39a2f;font-size:28px;font-weight:900;letter-spacing:2px">TITAN</div>
           <div style="margin-top:22px;padding:28px;background:#151d27;border:1px solid #303b47;border-radius:16px">
-            <h1 style="margin:0 0 12px;font-size:23px">Confirme seu e-mail</h1>
-            <p style="color:#a8b3bf;line-height:1.6">Olá, {safe_name}! Use o código abaixo para liberar sua conta:</p>
+            <h1 style="margin:0 0 12px;font-size:23px">{email_title}</h1>
+            <p style="color:#a8b3bf;line-height:1.6">Olá, {safe_name}! {email_intro}</p>
             <div style="margin:22px 0;padding:16px;text-align:center;background:#0c1219;border-radius:12px;color:#ffad4c;font-size:34px;font-weight:900;letter-spacing:9px">{code}</div>
-            <p style="color:#a8b3bf;font-size:13px">O código expira em {VERIFICATION_TTL_MINUTES} minutos. Se você não criou esta conta, ignore esta mensagem.</p>
+            <p style="color:#a8b3bf;font-size:13px">O código expira em {VERIFICATION_TTL_MINUTES} minutos. {email_warning}</p>
           </div>
         </div></body></html>""",
         subtype="html",
@@ -218,6 +258,24 @@ def send_verification_email(name: str, email: str, code: str) -> bool:
         return False
 
 
+def send_verification_email(name: str, email: str, code: str) -> bool:
+    """Fronteira segura: nenhuma falha do provedor de e-mail derruba o cadastro."""
+    try:
+        return _send_verification_email(name, email, code)
+    except Exception:
+        app.logger.exception("Falha inesperada ao preparar ou enviar o e-mail de confirmação.")
+        return False
+
+
+def send_password_reset_email(name: str, email: str, code: str) -> bool:
+    """O reset de senha também nunca pode derrubar a aplicação por falha SMTP."""
+    try:
+        return _send_verification_email(name, email, code, purpose="reset")
+    except Exception:
+        app.logger.exception("Falha inesperada ao preparar ou enviar o e-mail de recuperação.")
+        return False
+
+
 def db_conn() -> sqlite3.Connection:
     connection = sqlite3.connect(DB_PATH, timeout=20)
     connection.row_factory = sqlite3.Row
@@ -239,6 +297,15 @@ def init_db() -> None:
         );
 
         CREATE TABLE IF NOT EXISTS email_verifications(
+            user_id INTEGER PRIMARY KEY,
+            code_hash TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            last_sent_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS password_resets(
             user_id INTEGER PRIMARY KEY,
             code_hash TEXT NOT NULL,
             expires_at TEXT NOT NULL,
@@ -838,6 +905,14 @@ def register():
         except sqlite3.IntegrityError:
             flash("Este e-mail já está cadastrado.")
             return render_template("register.html", form_name=name, form_email=email)
+        except sqlite3.Error:
+            app.logger.exception("Falha de banco de dados durante a criação da conta.")
+            flash("Não foi possível criar a conta no banco de dados. Tente novamente em instantes.")
+            return render_template("register.html", form_name=name, form_email=email)
+        except Exception:
+            app.logger.exception("Falha inesperada durante a criação da conta.")
+            flash("Não foi possível concluir o cadastro. Nenhuma senha foi enviada por e-mail.")
+            return render_template("register.html", form_name=name, form_email=email)
         session.clear()
         session["pending_user_id"] = user_id
         csrf_token()
@@ -886,6 +961,131 @@ def login():
         csrf_token()
         return redirect(safe_next_url(request.args.get("next")) or url_for("dashboard"))
     return render_template("login.html")
+
+
+@app.route("/esqueci-senha", methods=["GET", "POST"])
+def forgot_password():
+    if g.user:
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        mail_job = None
+        if re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+            try:
+                with db_conn() as db:
+                    user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+                    if user and user["email_verified"]:
+                        reset = db.execute(
+                            "SELECT * FROM password_resets WHERE user_id=?", (user["id"],)
+                        ).fetchone()
+                        can_send = True
+                        if reset:
+                            elapsed = (utc_now() - parse_utc(reset["last_sent_at"])).total_seconds()
+                            can_send = elapsed >= VERIFICATION_RESEND_SECONDS
+                        if can_send:
+                            code = issue_password_reset_code(db, user["id"])
+                            db.commit()
+                            mail_job = (user["name"], user["email"], code)
+            except Exception:
+                app.logger.exception("Falha ao iniciar a recuperação de senha.")
+        if mail_job:
+            send_password_reset_email(*mail_job)
+        session["password_reset_email"] = email
+        flash("Se existir uma conta confirmada com esse e-mail, enviamos um código de recuperação.")
+        return redirect(url_for("reset_password"))
+    return render_template("forgot_password.html")
+
+
+@app.route("/redefinir-senha", methods=["GET", "POST"])
+def reset_password():
+    if g.user:
+        return redirect(url_for("dashboard"))
+    email = session.get("password_reset_email", "")
+    if not email:
+        flash("Informe seu e-mail para iniciar a recuperação.")
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        code = request.form.get("code", "").strip()
+        new_password = request.form.get("password", "")
+        confirmation = request.form.get("password_confirm", "")
+        with db_conn() as db:
+            user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+            reset = db.execute(
+                "SELECT * FROM password_resets WHERE user_id=?", (user["id"],)
+            ).fetchone() if user else None
+
+        if not user or not reset:
+            flash("Código inválido ou expirado. Solicite um novo código.")
+        elif parse_utc(reset["expires_at"]) <= utc_now():
+            flash("Esse código expirou. Solicite um novo código.")
+        elif reset["attempts"] >= VERIFICATION_MAX_ATTEMPTS:
+            flash("Limite de tentativas atingido. Solicite um novo código.")
+        elif not re.fullmatch(r"\d{6}", code):
+            flash("Digite os 6 números do código.")
+        elif not secrets.compare_digest(reset["code_hash"], password_reset_code_hash(user["id"], code)):
+            attempts = reset["attempts"] + 1
+            with db_conn() as db:
+                db.execute("UPDATE password_resets SET attempts=? WHERE user_id=?", (attempts, user["id"]))
+                db.commit()
+            remaining = max(0, VERIFICATION_MAX_ATTEMPTS - attempts)
+            flash(f"Código incorreto. Restam {remaining} tentativa(s).")
+        else:
+            errors = password_errors(new_password, user["name"], user["email"])
+            if errors:
+                flash("A nova senha ainda precisa de: " + ", ".join(errors) + ".")
+            elif new_password != confirmation:
+                flash("A confirmação da nova senha não corresponde.")
+            elif check_password_hash(user["password_hash"], new_password):
+                flash("A nova senha precisa ser diferente da senha anterior.")
+            else:
+                with db_conn() as db:
+                    db.execute(
+                        "UPDATE users SET password_hash=? WHERE id=?",
+                        (generate_password_hash(new_password), user["id"]),
+                    )
+                    db.execute("DELETE FROM password_resets WHERE user_id=?", (user["id"],))
+                    db.commit()
+                session.clear()
+                flash("Senha alterada com segurança. Entre usando sua nova senha.")
+                return redirect(url_for("login"))
+
+    return render_template(
+        "reset_password.html",
+        masked_email=mask_email(email),
+        ttl_minutes=VERIFICATION_TTL_MINUTES,
+    )
+
+
+@app.post("/redefinir-senha/reenviar")
+def resend_password_reset():
+    if g.user:
+        return redirect(url_for("dashboard"))
+    email = session.get("password_reset_email", "")
+    if not email:
+        return redirect(url_for("forgot_password"))
+    mail_job = None
+    try:
+        with db_conn() as db:
+            user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+            if user and user["email_verified"]:
+                reset = db.execute(
+                    "SELECT * FROM password_resets WHERE user_id=?", (user["id"],)
+                ).fetchone()
+                can_send = True
+                if reset:
+                    elapsed = (utc_now() - parse_utc(reset["last_sent_at"])).total_seconds()
+                    can_send = elapsed >= VERIFICATION_RESEND_SECONDS
+                if can_send:
+                    code = issue_password_reset_code(db, user["id"])
+                    db.commit()
+                    mail_job = (user["name"], user["email"], code)
+    except Exception:
+        app.logger.exception("Falha ao reenviar código de recuperação.")
+    if mail_job:
+        send_password_reset_email(*mail_job)
+    flash("Se o endereço estiver apto, um novo código foi enviado. Aguarde antes de tentar novamente.")
+    return redirect(url_for("reset_password"))
 
 
 @app.route("/verificar-email", methods=["GET", "POST"])
