@@ -1,30 +1,109 @@
-{% extends "base.html" %}{% block content %}
-<div class="hero"><div><small>PROJETO DE {{ g.user.name|upper }}</small><h1>De {{ '%.1f'|format(s.start_weight) }} kg para {{ '%.0f'|format(s.goal_weight) }} kg</h1>
-<p>Meta final: {{ '%.0f'|format(s.final_goal) }} kg • acompanhe alimentação, treino e recuperação sem perder os detalhes.</p></div>
-<form class="datebox"><input type="date" name="day" value="{{ day }}"><button>Ver dia</button></form></div>
-<div class="calculated-strip"><span>Metas calculadas pela avaliação inicial</span><b>TMB {{ s.bmr|round|int }} kcal</b><b>Manutenção {{ s.tdee|round|int }} kcal</b><a href="{{ url_for('onboarding') }}">recalcular</a></div>
-<div class="grid stats">
-<article><span>Peso atual</span><strong>{{ '%.1f'|format(latest_weight) }} kg</strong><small>IMC {{ '%.1f'|format(bmi) }}</small></article>
-<article><span>Calorias do dia</span><strong>{{ '%.0f'|format(totals.calories) }} / {{ s.calories }}</strong><small>{{ '%.0f'|format(s.calories-totals.calories) if totals.calories<s.calories else 'meta atingida' }} kcal</small></article>
-<article><span>Proteína do dia</span><strong>{{ '%.0f'|format(totals.protein) }} / {{ s.protein }} g</strong><small>carboidratos: {{ '%.0f'|format(totals.carbs) }} g</small></article>
-<article><span>Progresso da etapa</span><strong>{{ '%.0f'|format(progress) }}%</strong><small>{{ '%.1f'|format([0,s.goal_weight-latest_weight]|max) }} kg restantes</small></article></div>
-<section class="panel"><div class="title-row"><div><h2>Metas nutricionais do dia</h2><p class="muted">Cálculo realizado a partir da porção e da quantidade de cada alimento.</p></div><a class="button ghost" href="{{ url_for('daily_report',day=day) }}">Gerar PDF</a></div>
-<div class="macro-grid">{% for label,value,goal,unit,cls in [('Calorias',totals.calories,s.calories,'kcal','orange'),('Proteínas',totals.protein,s.protein,'g','blue'),('Carboidratos',totals.carbs,s.carbs,'g','green'),('Gorduras',totals.fat,s.fat,'g','pink')] %}
-<div class="macro-card"><div class="line"><b>{{ label }}</b><span>{{ '%.0f'|format(value) }} / {{ goal }} {{ unit }}</span></div><div class="bar {{ cls }}"><i style="width:{{ [100,(value/goal*100 if goal else 0)]|min }}%"></i></div><small>{{ '%.0f'|format([0,goal-value]|max) }} {{ unit }} restantes</small></div>{% endfor %}</div></section>
+{% extends "base.html" %}
+{% block title %}Meu dia • TITAN{% endblock %}
+{% block content %}
+{% set meal_done = meals|length > 0 %}
+{% set habit_done = habit is not none %}
+{% set training_done = workouts|length > 0 or (habit and habit.trained) %}
+{% set calorie_done = totals.calories >= (s.calories * 0.9) %}
+{% set journey = namespace(done=0) %}
+{% if meal_done %}{% set journey.done = journey.done + 1 %}{% endif %}
+{% if habit_done %}{% set journey.done = journey.done + 1 %}{% endif %}
+{% if training_done %}{% set journey.done = journey.done + 1 %}{% endif %}
+{% if calorie_done %}{% set journey.done = journey.done + 1 %}{% endif %}
+
+<div class="hero dashboard-hero" id="topo">
+  <div>
+    <small>OLÁ, {{ g.user.name|upper }}</small>
+    <h1>Seu dia no TITAN</h1>
+    <p>Meta da etapa: sair de {{ '%.1f'|format(s.start_weight) }} kg e chegar a {{ '%.1f'|format(s.goal_weight) }} kg, acompanhando cada refeição.</p>
+  </div>
+  <form class="datebox" aria-label="Escolher dia do acompanhamento">
+    <label for="day-filter">Dia acompanhado</label>
+    <div><input id="day-filter" type="date" name="day" value="{{ day }}"><button>Ver dia</button></div>
+  </form>
+</div>
+
+<section class="daily-route" aria-labelledby="route-title">
+  <div class="route-summary">
+    <div class="progress-ring" style="--progress:{{ journey.done * 25 }}" aria-label="{{ journey.done }} de 4 passos concluídos"><strong>{{ journey.done }}/4</strong><span>do dia</span></div>
+    <div>
+      <span class="eyebrow">SUA ROTA DE HOJE</span>
+      <h2 id="route-title">
+        {% if not meal_done %}Comece registrando o que você comeu
+        {% elif not calorie_done %}Continue alimentando sua meta calórica
+        {% elif not habit_done %}Complete os hábitos do dia
+        {% elif not training_done %}Registre seu treino ou descanso
+        {% else %}Seu acompanhamento de hoje está completo{% endif %}
+      </h2>
+      <p>
+        {% if not meal_done %}Escolha um alimento e informe a quantidade. As kcal e os macros serão calculados automaticamente.
+        {% elif not calorie_done %}Ainda faltam {{ '%.0f'|format([0,s.calories-totals.calories]|max) }} kcal para a meta; registre as próximas refeições conforme elas acontecerem.
+        {% elif not habit_done %}Informe água, sono, apetite e se houve treino para melhorar a análise automática.
+        {% elif not training_done %}Abra a área de treinos para salvar exercícios, séries, repetições e carga.
+        {% else %}Você pode revisar os números ou planejar a próxima refeição na agenda.{% endif %}
+      </p>
+    </div>
+    {% if not meal_done or not calorie_done %}<a class="button route-action" href="#registrar-refeicao">Registrar refeição</a>
+    {% elif not habit_done %}<a class="button route-action" href="#registrar-habitos">Registrar hábitos</a>
+    {% elif not training_done %}<a class="button route-action" href="{{ url_for('workouts') }}">Ir para treinos</a>
+    {% else %}<a class="button route-action" href="{{ url_for('calendar_page') }}">Planejar amanhã</a>{% endif %}
+  </div>
+  <div class="route-steps">
+    <a class="route-step {% if meal_done %}done{% endif %}" href="#registrar-refeicao"><i>{% if meal_done %}✓{% else %}1{% endif %}</i><span><b>Alimentação</b><small>{{ meals|length }} item(ns)</small></span></a>
+    <a class="route-step {% if calorie_done %}done{% endif %}" href="#metas-nutricionais"><i>{% if calorie_done %}✓{% else %}2{% endif %}</i><span><b>Meta calórica</b><small>{{ '%.0f'|format(totals.calories) }} de {{ s.calories }} kcal</small></span></a>
+    <a class="route-step {% if habit_done %}done{% endif %}" href="#registrar-habitos"><i>{% if habit_done %}✓{% else %}3{% endif %}</i><span><b>Hábitos</b><small>{% if habit_done %}registrados{% else %}pendente{% endif %}</small></span></a>
+    <a class="route-step {% if training_done %}done{% endif %}" href="{{ url_for('workouts') }}"><i>{% if training_done %}✓{% else %}4{% endif %}</i><span><b>Treino</b><small>{% if training_done %}registrado{% else %}pendente{% endif %}</small></span></a>
+  </div>
+</section>
+
+<div class="calculated-strip"><span>Metas calculadas pela avaliação inicial</span><b>TMB {{ s.bmr|round|int }} kcal</b><b>Manutenção {{ s.tdee|round|int }} kcal</b><a href="{{ url_for('onboarding') }}">Recalcular plano</a></div>
+
+<div class="grid stats dashboard-stats">
+  <article><span>Peso atual</span><strong>{{ '%.1f'|format(latest_weight) }} kg</strong><small>IMC {{ '%.1f'|format(bmi) }}</small></article>
+  <article><span>Calorias do dia</span><strong>{{ '%.0f'|format(totals.calories) }} <em>/ {{ s.calories }}</em></strong><small>{{ '%.0f'|format(s.calories-totals.calories) if totals.calories<s.calories else 'Meta atingida' }}{% if totals.calories<s.calories %} kcal restantes{% endif %}</small></article>
+  <article><span>Proteína do dia</span><strong>{{ '%.0f'|format(totals.protein) }} <em>/ {{ s.protein }} g</em></strong><small>Carboidratos: {{ '%.0f'|format(totals.carbs) }} g</small></article>
+  <article><span>Progresso da etapa</span><strong>{{ '%.0f'|format(progress) }}%</strong><small>{{ '%.1f'|format([0,s.goal_weight-latest_weight]|max) }} kg restantes</small></article>
+</div>
+
+<section class="panel section-panel" id="metas-nutricionais">
+  <div class="title-row"><div><span class="section-number">01</span><h2>Metas nutricionais do dia</h2><p class="muted">O cálculo usa a porção e a quantidade de cada alimento — as kcal continuam sempre visíveis.</p></div><a class="button ghost" href="{{ url_for('daily_report',day=day) }}">Gerar PDF do dia</a></div>
+  <div class="macro-grid">{% for label,value,goal,unit,cls in [('Calorias',totals.calories,s.calories,'kcal','orange'),('Proteínas',totals.protein,s.protein,'g','blue'),('Carboidratos',totals.carbs,s.carbs,'g','green'),('Gorduras',totals.fat,s.fat,'g','pink')] %}
+    <div class="macro-card"><div class="line"><b>{{ label }}</b><span>{{ '%.0f'|format(value) }} / {{ goal }} {{ unit }}</span></div><div class="bar {{ cls }}"><i style="width:{{ [100,(value/goal*100 if goal else 0)]|min }}%"></i></div><small>{{ '%.0f'|format([0,goal-value]|max) }} {{ unit }} restantes</small></div>
+  {% endfor %}</div>
+</section>
+
+<div class="two action-columns">
+  <section class="panel section-panel" id="registrar-refeicao">
+    <div class="section-heading"><span class="section-number">02</span><div><h2>Registrar uma refeição</h2><p class="muted">Informe o alimento e a quantidade consumida.</p></div></div>
+    <form method="post" action="{{ url_for('add_meal') }}" class="form"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}">
+      <label>Momento da refeição<select name="meal_type"><option>Café da manhã</option><option>Lanche</option><option selected>Almoço</option><option>Jantar</option><option>Ceia</option><option>Refeição</option></select></label>
+      <label>Alimento<select name="food_id" required>{% for food in foods_all %}<option value="{{ food.id }}">{{ food.name }} — {{ food.calories }} kcal por {{ food.serving }} {{ food.unit }}</option>{% endfor %}</select></label>
+      <label>Quantidade consumida<input type="number" step=".1" min=".1" name="quantity" placeholder="Quantidade em g, ml ou unidade" required></label>
+      <button>Adicionar e calcular kcal/macros</button>
+    </form>
+    <a class="button ghost block-button" href="{{ url_for('foods') }}">Consultar ou cadastrar alimentos</a>
+  </section>
+  <section class="panel section-panel" id="registrar-habitos">
+    <div class="section-heading"><span class="section-number">03</span><div><h2>Completar hábitos do dia</h2><p class="muted">Esses dados deixam a análise mais fiel à sua rotina.</p></div></div>
+    <form method="post" action="{{ url_for('save_habit') }}" class="form"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}">
+      <div class="form-grid two-cols"><label>Água (L)<input type="number" step=".1" name="water" value="{{ habit.water if habit else 0 }}"></label><label>Sono (h)<input type="number" step=".1" name="sleep" value="{{ habit.sleep if habit else 0 }}"></label></div>
+      <label>Apetite do dia<select name="appetite"><option value="0">Não registrei</option>{% for n,label in [(1,'Muito baixo'),(2,'Baixo'),(3,'Normal'),(4,'Bom'),(5,'Muito alto')] %}<option value="{{ n }}" {% if habit and habit.appetite==n %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+      <label class="check"><input type="checkbox" name="trained" {% if habit and habit.trained %}checked{% endif %}> Treinei neste dia</label><button>Salvar hábitos</button>
+    </form>
+  </section>
+</div>
+
+<section class="panel section-panel" id="refeicoes-registradas">
+  <div class="title-row"><div><span class="section-number">04</span><h2>Refeições registradas</h2><p class="muted">Cada linha mostra as calorias e os macros calculados pela quantidade informada.</p></div><strong>{{ meals|length }} item(ns)</strong></div>
+  {% if meals %}<div class="nutrition-table"><div class="nutrition-head"><span>Refeição / alimento</span><span>Quantidade</span><span>Energia</span><span>Proteína</span><span>Carbo</span><span>Gordura</span><span></span></div>
+  {% for m in meals %}{% set factor=m.quantity/m.serving %}<div class="nutrition-row"><span><b>{{ m.name }}</b><small>{{ m.meal_type }} • base {{ m.serving }} {{ m.unit }}</small></span><span data-label="Quantidade">{{ '%.0f'|format(m.quantity) }} {{ m.unit }}</span><strong data-label="Energia">{{ '%.0f'|format(m.calories*factor) }} kcal</strong><span data-label="Proteína">{{ '%.1f'|format(m.protein*factor) }} g</span><span data-label="Carbo">{{ '%.1f'|format(m.carbs*factor) }} g</span><span data-label="Gordura">{{ '%.1f'|format(m.fat*factor) }} g</span>
+  <form method="post" action="{{ url_for('delete_meal',item_id=m.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}"><button class="danger icon-button" aria-label="Excluir {{ m.name }}">×</button></form></div>{% endfor %}</div>{% else %}<div class="empty-state"><b>Nenhuma refeição registrada neste dia</b><span>Use o formulário acima para começar; as kcal aparecerão aqui.</span><a href="#registrar-refeicao">Registrar primeira refeição</a></div>{% endif %}
+</section>
+
 <div class="two">
-<section class="panel"><h2>Adicionar refeição</h2><form method="post" action="{{ url_for('add_meal') }}" class="form"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}">
-<label>Momento da refeição<select name="meal_type"><option>Café da manhã</option><option>Lanche</option><option selected>Almoço</option><option>Jantar</option><option>Ceia</option><option>Refeição</option></select></label>
-<label>Alimento<select name="food_id" required>{% for food in foods_all %}<option value="{{ food.id }}">{{ food.name }} — {{ food.calories }} kcal por {{ food.serving }} {{ food.unit }}</option>{% endfor %}</select></label>
-<label>Quantidade consumida<input type="number" step=".1" min=".1" name="quantity" placeholder="Quantidade em g ou ml" required></label><button>Adicionar e calcular macros</button></form>
-<a class="button ghost block-button" href="{{ url_for('foods') }}">Cadastrar ou consultar alimentos</a></section>
-<section class="panel"><h2>Água, sono, treino e apetite</h2><form method="post" action="{{ url_for('save_habit') }}" class="form"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}">
-<div class="form-grid two-cols"><label>Água (L)<input type="number" step=".1" name="water" value="{{ habit.water if habit else 0 }}"></label><label>Sono (h)<input type="number" step=".1" name="sleep" value="{{ habit.sleep if habit else 0 }}"></label></div>
-<label>Apetite do dia<select name="appetite"><option value="0">Não registrei</option>{% for n,label in [(1,'Muito baixo'),(2,'Baixo'),(3,'Normal'),(4,'Bom'),(5,'Muito alto')] %}<option value="{{ n }}" {% if habit and habit.appetite==n %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-<label class="check"><input type="checkbox" name="trained" {% if habit and habit.trained %}checked{% endif %}> Treinei neste dia</label><button>Salvar hábitos</button></form></section></div>
-<section class="panel"><div class="title-row"><div><h2>Refeições registradas</h2><p class="muted">Cada linha mostra as calorias e os macros realmente calculados pela quantidade informada.</p></div><strong>{{ meals|length }} item(ns)</strong></div>
-{% if meals %}<div class="nutrition-table"><div class="nutrition-head"><span>Refeição / alimento</span><span>Quantidade</span><span>Energia</span><span>Proteína</span><span>Carbo</span><span>Gordura</span><span></span></div>
-{% for m in meals %}{% set factor=m.quantity/m.serving %}<div class="nutrition-row"><span><b>{{ m.name }}</b><small>{{ m.meal_type }} • base {{ m.serving }} {{ m.unit }}</small></span><span>{{ '%.0f'|format(m.quantity) }} {{ m.unit }}</span><strong>{{ '%.0f'|format(m.calories*factor) }} kcal</strong><span>{{ '%.1f'|format(m.protein*factor) }} g</span><span>{{ '%.1f'|format(m.carbs*factor) }} g</span><span>{{ '%.1f'|format(m.fat*factor) }} g</span>
-<form method="post" action="{{ url_for('delete_meal',item_id=m.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}"><button class="danger icon-button">×</button></form></div>{% endfor %}</div>{% else %}<p class="empty">Nenhum alimento registrado neste dia.</p>{% endif %}</section>
-<div class="two"><section class="panel"><h2>Análise automática TITAN</h2><p class="muted">Leitura local dos registros dos últimos sete dias.</p><div class="insights">{% for x in insights %}<article class="insight {{ x.level }}"><b>{{ x.title }}</b><p>{{ x.text }}</p></article>{% endfor %}</div></section>
-<section class="panel"><h2>Previsão de metas</h2><p class="muted">Baseada na tendência entre seus registros de peso, não em promessa de resultado.</p><div class="milestones">{% for p in predictions %}<div><b>{{ p.goal }} kg</b><span>{{ p.text }}</span></div>{% endfor %}</div></section></div>
-<section class="panel"><h2>Evolução do peso</h2>{% if weights %}<svg class="chart" viewBox="0 0 800 220" preserveAspectRatio="none">{% set minw=weights|map(attribute='weight')|min %}{% set maxw=weights|map(attribute='weight')|max %}{% set span=(maxw-minw) if maxw!=minw else 1 %}<polyline points="{% for w in weights %}{{ 20+loop.index0*(760/([1,weights|length-1]|max)) }},{{ 190-((w.weight-minw)/span*150) }} {% endfor %}"/>{% for w in weights %}<circle cx="{{ 20+loop.index0*(760/([1,weights|length-1]|max)) }}" cy="{{ 190-((w.weight-minw)/span*150) }}" r="5"><title>{{ w.day }}: {{ w.weight }} kg</title></circle>{% endfor %}</svg>{% else %}<p class="empty">Registre seu primeiro peso na tela Evolução.</p>{% endif %}</section>{% endblock %}
+  <section class="panel"><h2>Análise automática TITAN</h2><p class="muted">Leitura local dos registros dos últimos sete dias.</p><div class="insights">{% for x in insights %}<article class="insight {{ x.level }}"><b>{{ x.title }}</b><p>{{ x.text }}</p></article>{% endfor %}</div></section>
+  <section class="panel"><h2>Previsão de metas</h2><p class="muted">Baseada na tendência entre seus registros de peso, não em promessa de resultado.</p><div class="milestones">{% for p in predictions %}<div><b>{{ p.goal }} kg</b><span>{{ p.text }}</span></div>{% endfor %}</div></section>
+</div>
+
+<section class="panel"><div class="title-row"><div><h2>Evolução do peso</h2><p class="muted">Veja a direção dos seus registros ao longo do tempo.</p></div><a class="button ghost" href="{{ url_for('progress') }}">Registrar peso</a></div>{% if weights %}<svg class="chart" viewBox="0 0 800 220" preserveAspectRatio="none" role="img" aria-label="Gráfico da evolução do peso">{% set minw=weights|map(attribute='weight')|min %}{% set maxw=weights|map(attribute='weight')|max %}{% set span=(maxw-minw) if maxw!=minw else 1 %}<polyline points="{% for w in weights %}{{ 20+loop.index0*(760/([1,weights|length-1]|max)) }},{{ 190-((w.weight-minw)/span*150) }} {% endfor %}"/>{% for w in weights %}<circle cx="{{ 20+loop.index0*(760/([1,weights|length-1]|max)) }}" cy="{{ 190-((w.weight-minw)/span*150) }}" r="5"><title>{{ w.day }}: {{ w.weight }} kg</title></circle>{% endfor %}</svg>{% else %}<p class="empty">Registre seu primeiro peso na tela Evolução.</p>{% endif %}</section>
+{% endblock %}

@@ -2,6 +2,13 @@
 <section class="onboarding-shell">
   <div class="onboarding-brand"><div class="auth-logo">TITAN<span>AVALIAÇÃO INICIAL</span></div><small>PASSO <b id="step-number">1</b> DE 5</small></div>
   <div class="quiz-progress"><i id="quiz-progress-bar"></i></div>
+  <ol class="quiz-map" aria-label="Etapas da avaliação">
+    <li class="current" data-quiz-marker><span>1</span>Seu corpo</li>
+    <li data-quiz-marker><span>2</span>Objetivo</li>
+    <li data-quiz-marker><span>3</span>Rotina</li>
+    <li data-quiz-marker><span>4</span>Adaptação</li>
+    <li data-quiz-marker><span>5</span>Planejamento</li>
+  </ol>
   <form method="post" class="quiz-form" id="quiz-form">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 
@@ -78,9 +85,9 @@
 </section>
 {% endblock %}{% block scripts %}<script>
 (() => {
-  const steps=[...document.querySelectorAll('.quiz-step')], next=document.getElementById('next-step'), prev=document.getElementById('prev-step'), submit=document.getElementById('submit-quiz'), progress=document.getElementById('quiz-progress-bar'), number=document.getElementById('step-number');
+  const steps=[...document.querySelectorAll('.quiz-step')], markers=[...document.querySelectorAll('[data-quiz-marker]')], next=document.getElementById('next-step'), prev=document.getElementById('prev-step'), submit=document.getElementById('submit-quiz'), progress=document.getElementById('quiz-progress-bar'), number=document.getElementById('step-number');
   let current=0;
-  function render(){steps.forEach((s,i)=>s.classList.toggle('active',i===current));number.textContent=current+1;progress.style.width=((current+1)/steps.length*100)+'%';prev.disabled=current===0;next.hidden=current===steps.length-1;submit.hidden=current!==steps.length-1;window.scrollTo({top:0,behavior:'smooth'});}
+  function render(){steps.forEach((s,i)=>s.classList.toggle('active',i===current));markers.forEach((marker,i)=>{marker.classList.toggle('current',i===current);marker.classList.toggle('complete',i<current);});number.textContent=current+1;progress.style.width=((current+1)/steps.length*100)+'%';prev.disabled=current===0;next.hidden=current===steps.length-1;submit.hidden=current!==steps.length-1;window.scrollTo({top:0,behavior:'smooth'});}
   function validStep(){const fields=[...steps[current].querySelectorAll('input,select,textarea')];for(const field of fields){if(!field.checkValidity()){field.reportValidity();return false;}}const radios=[...new Set(fields.filter(x=>x.type==='radio').map(x=>x.name))];for(const name of radios){if(!steps[current].querySelector(`input[name="${name}"]:checked`)){alert('Selecione uma opção para continuar.');return false;}}return true;}
   next.addEventListener('click',()=>{if(validStep()&&current<steps.length-1){current++;render();}});prev.addEventListener('click',()=>{if(current>0){current--;render();}});
   document.querySelectorAll('.choice-card input').forEach(input=>input.addEventListener('change',()=>{document.querySelectorAll(`input[name="${input.name}"]`).forEach(x=>x.closest('.choice-card').classList.toggle('selected',x.checked));}));

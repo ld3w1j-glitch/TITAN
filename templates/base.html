@@ -1,29 +1,146 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b0e12"><title>{% block title %}Projeto TITAN{% endblock %}</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0e12">
+<title>{% block title %}Projeto TITAN{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
 </head>
-<body>
+<body class="{% if g.user and not hide_nav %}app-body{% else %}auth-body{% endif %}">
+<svg class="icon-sprite" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10M9.5 20v-6h5v6"/></symbol>
+  <symbol id="i-food" viewBox="0 0 24 24"><path d="M7 3v8M4 3v5a3 3 0 0 0 6 0V3M7 11v10M15 3v18M15 3c3 1 5 4 5 8h-5"/></symbol>
+  <symbol id="i-progress" viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19V3"/><path d="m3 13 6-6 6 3 6-6"/></symbol>
+  <symbol id="i-workout" viewBox="0 0 24 24"><path d="M6 9v6M3 10v4M18 9v6M21 10v4M6 12h12"/></symbol>
+  <symbol id="i-planner" viewBox="0 0 24 24"><path d="M4 7h16v13H4zM8 4v6M16 4v6M4 11h16"/></symbol>
+  <symbol id="i-market" viewBox="0 0 24 24"><path d="M3 4h2l2.2 10h10.9l2-7H6"/><circle cx="9" cy="19" r="1.5"/><circle cx="18" cy="19" r="1.5"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/></symbol>
+</svg>
+
 {% if g.user and not hide_nav %}
-<header class="topbar">
-  <a class="brand" href="{{ url_for('dashboard') }}">TITAN <span>EVOLUÇÃO FÍSICA</span></a>
-  <button class="menu-button" type="button" onclick="document.querySelector('nav').classList.toggle('open')">☰</button>
-  <nav>
-    <a href="{{ url_for('dashboard') }}">Painel</a><a href="{{ url_for('foods') }}">Alimentos</a>
-    <a href="{{ url_for('progress') }}">Evolução</a><a href="{{ url_for('workouts') }}">Treinos</a>
-    <a href="{{ url_for('planner') }}">Marmitas</a><a href="{{ url_for('markets') }}">Mercados</a>
-    <a href="{{ url_for('calendar_page') }}">Agenda</a><a href="{{ url_for('settings_page') }}">Metas</a>
-    <a class="user-link" href="{{ url_for('logout') }}">{{ g.user.name }} • sair</a>
-  </nav>
-</header>
+{% set endpoint = request.endpoint %}
+{% set nutrition_endpoints = ['foods','edit_food','delete_food'] %}
+{% set progress_endpoints = ['progress','uploaded_file','delete_photo'] %}
+{% set workout_endpoints = ['workouts','delete_exercise'] %}
+{% set planner_endpoints = ['planner','planner_delete','planner_pdf'] %}
+{% set market_endpoints = ['markets','delete_store'] %}
+{% set calendar_endpoints = ['calendar_page','delete_calendar_item','delete_reminder','calendar_ics'] %}
+<div class="app-shell">
+  <button class="nav-backdrop" type="button" aria-label="Fechar menu" data-nav-close></button>
+  <aside class="app-sidebar" id="primary-navigation" aria-label="Navegação principal">
+    <div class="sidebar-head">
+      <a class="brand" href="{{ url_for('dashboard') }}" aria-label="TITAN — ir para o painel">TITAN <span>EVOLUÇÃO FÍSICA</span></a>
+      <button class="sidebar-close" type="button" aria-label="Fechar menu" data-nav-close><svg><use href="#i-close"/></svg></button>
+    </div>
+
+    <div class="sidebar-guide">
+      <svg><use href="#i-spark"/></svg>
+      <div><small>SEU PROJETO</small><b>{{ g.user.name }}</b><span>Um passo de cada vez</span></div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-group">
+        <span class="nav-label">Acompanhar hoje</span>
+        <a class="nav-item {% if endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}" {% if endpoint == 'dashboard' %}aria-current="page"{% endif %}>
+          <svg><use href="#i-home"/></svg><span><b>Meu dia</b><small>Resumo e registros</small></span>
+        </a>
+      </div>
+      <div class="nav-group">
+        <span class="nav-label">Minha rotina</span>
+        <a class="nav-item {% if endpoint in nutrition_endpoints %}active{% endif %}" href="{{ url_for('foods') }}" {% if endpoint in nutrition_endpoints %}aria-current="page"{% endif %}>
+          <svg><use href="#i-food"/></svg><span><b>Alimentação</b><small>Alimentos e calorias</small></span>
+        </a>
+        <a class="nav-item {% if endpoint in progress_endpoints %}active{% endif %}" href="{{ url_for('progress') }}" {% if endpoint in progress_endpoints %}aria-current="page"{% endif %}>
+          <svg><use href="#i-progress"/></svg><span><b>Evolução</b><small>Peso, medidas e fotos</small></span>
+        </a>
+        <a class="nav-item {% if endpoint in workout_endpoints %}active{% endif %}" href="{{ url_for('workouts') }}" {% if endpoint in workout_endpoints %}aria-current="page"{% endif %}>
+          <svg><use href="#i-workout"/></svg><span><b>Treinos</b><small>Exercícios e cargas</small></span>
+        </a>
+      </div>
+      <div class="nav-group">
+        <span class="nav-label">Planejar</span>
+        <a class="nav-item {% if endpoint in planner_endpoints %}active{% endif %}" href="{{ url_for('planner') }}" {% if endpoint in planner_endpoints %}aria-current="page"{% endif %}>
+          <svg><use href="#i-planner"/></svg><span><b>Marmitas</b><small>Cardápio e orçamento</small></span>
+        </a>
+        <a class="nav-item {% if endpoint in market_endpoints %}active{% endif %}" href="{{ url_for('markets') }}" {% if endpoint in market_endpoints %}aria-current="page"{% endif %}>
+          <svg><use href="#i-market"/></svg><span><b>Supermercados</b><small>Compare os preços</small></span>
+        </a>
+        <a class="nav-item {% if endpoint in calendar_endpoints %}active{% endif %}" href="{{ url_for('calendar_page') }}" {% if endpoint in calendar_endpoints %}aria-current="page"{% endif %}>
+          <svg><use href="#i-calendar"/></svg><span><b>Agenda</b><small>Refeições e alarmes</small></span>
+        </a>
+      </div>
+      <div class="nav-group">
+        <span class="nav-label">Configurar</span>
+        <a class="nav-item {% if endpoint == 'settings_page' %}active{% endif %}" href="{{ url_for('settings_page') }}" {% if endpoint == 'settings_page' %}aria-current="page"{% endif %}>
+          <svg><use href="#i-target"/></svg><span><b>Meu plano</b><small>Metas e avaliação</small></span>
+        </a>
+      </div>
+    </nav>
+
+    <a class="sidebar-logout" href="{{ url_for('logout') }}"><svg><use href="#i-logout"/></svg><span>Sair da conta</span></a>
+  </aside>
+
+  <div class="app-stage">
+    <header class="workspace-bar">
+      <button class="nav-trigger" type="button" aria-label="Abrir menu" aria-controls="primary-navigation" aria-expanded="false" data-nav-open><svg><use href="#i-menu"/></svg></button>
+      <div class="current-location">
+        <small>
+          {% if endpoint == 'dashboard' %}ACOMPANHAMENTO
+          {% elif endpoint in nutrition_endpoints %}MINHA ROTINA
+          {% elif endpoint in progress_endpoints %}MINHA ROTINA
+          {% elif endpoint in workout_endpoints %}MINHA ROTINA
+          {% elif endpoint in planner_endpoints %}PLANEJAMENTO
+          {% elif endpoint in market_endpoints %}PLANEJAMENTO
+          {% elif endpoint in calendar_endpoints %}PLANEJAMENTO
+          {% else %}CONFIGURAÇÕES{% endif %}
+        </small>
+        <b>
+          {% if endpoint == 'dashboard' %}Meu dia
+          {% elif endpoint in nutrition_endpoints %}Alimentação
+          {% elif endpoint in progress_endpoints %}Evolução
+          {% elif endpoint in workout_endpoints %}Treinos
+          {% elif endpoint in planner_endpoints %}Marmitas
+          {% elif endpoint in market_endpoints %}Supermercados
+          {% elif endpoint in calendar_endpoints %}Agenda
+          {% else %}Meu plano{% endif %}
+        </b>
+      </div>
+      <div class="workspace-actions">
+        <a class="quick-add" href="{{ url_for('dashboard') }}#registrar-refeicao"><svg><use href="#i-plus"/></svg><span>Registrar refeição</span></a>
+        <span class="user-avatar" title="{{ g.user.name }}">{{ g.user.name[0]|upper }}</span>
+      </div>
+    </header>
+
+    <main class="main-content" id="conteudo-principal">
+{% else %}
+<main class="auth-main">
 {% endif %}
-<main class="{% if not g.user %}auth-main{% endif %}">
-{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}
-{% block content %}{% endblock %}
+  {% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash" role="status">{{ message }}</div>{% endfor %}{% endwith %}
+  {% block content %}{% endblock %}
+{% if g.user and not hide_nav %}
+    </main>
+    <footer class="app-footer">Projeto TITAN • acompanhamento pessoal • não substitui médico, nutricionista ou educador físico</footer>
+  </div>
+</div>
+
+<nav class="mobile-dock" aria-label="Atalhos principais">
+  <a class="{% if endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><svg><use href="#i-home"/></svg><span>Hoje</span></a>
+  <a class="{% if endpoint in nutrition_endpoints %}active{% endif %}" href="{{ url_for('foods') }}"><svg><use href="#i-food"/></svg><span>Alimentos</span></a>
+  <a class="{% if endpoint in progress_endpoints %}active{% endif %}" href="{{ url_for('progress') }}"><svg><use href="#i-progress"/></svg><span>Evolução</span></a>
+  <a class="{% if endpoint in workout_endpoints %}active{% endif %}" href="{{ url_for('workouts') }}"><svg><use href="#i-workout"/></svg><span>Treinos</span></a>
+  <button type="button" data-nav-open><svg><use href="#i-menu"/></svg><span>Mais</span></button>
+</nav>
+{% else %}
 </main>
-{% if g.user and not hide_nav %}<footer>Projeto TITAN • análise automática de acompanhamento • não substitui médico, nutricionista ou educador físico</footer>{% endif %}
+{% endif %}
 <script src="{{ url_for('static',filename='app.js') }}"></script>
 {% block scripts %}{% endblock %}
-</body></html>
+</body>
+</html>

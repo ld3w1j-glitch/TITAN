@@ -1,6 +1,16 @@
-# Projeto TITAN V3.2 — Base V2 preservada
+# Projeto TITAN V3.3 — Navegação guiada + Base V2 preservada
 
 Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. Ela mantém kcal e macros por alimento e por refeição e acrescenta login, fotos, previsões, análise automática, comparador de mercados, calendário, exercícios com mídia e deploy no Railway.
+
+## Nova experiência de navegação
+- menu lateral permanente no computador, dividido em **Meu dia**, **Minha rotina**, **Planejar** e **Configurar**;
+- barra inferior com os quatro atalhos principais no celular;
+- tela atual sempre destacada e identificada no topo;
+- botão rápido **Registrar refeição** disponível em todos os módulos;
+- painel **Sua rota de hoje**, com quatro passos e próxima ação recomendada;
+- questionário com mapa visual das cinco etapas;
+- resultado inicial com orientação clara dos três primeiros passos;
+- kcal e macros preservados e visíveis no painel, nos alimentos e nas refeições.
 
 ## Railway
 1. Envie os arquivos para um repositório GitHub.
