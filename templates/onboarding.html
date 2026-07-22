@@ -1,0 +1,97 @@
+{% extends "base.html" %}{% block title %}Avaliação inicial • TITAN{% endblock %}{% block content %}
+<section class="onboarding-shell">
+  <div class="onboarding-brand"><div class="auth-logo">TITAN<span>AVALIAÇÃO INICIAL</span></div><small>PASSO <b id="step-number">1</b> DE 5</small></div>
+  <div class="quiz-progress"><i id="quiz-progress-bar"></i></div>
+  <ol class="quiz-map" aria-label="Etapas da avaliação">
+    <li class="current" data-quiz-marker><span>1</span>Seu corpo</li>
+    <li data-quiz-marker><span>2</span>Objetivo</li>
+    <li data-quiz-marker><span>3</span>Rotina</li>
+    <li data-quiz-marker><span>4</span>Adaptação</li>
+    <li data-quiz-marker><span>5</span>Planejamento</li>
+  </ol>
+  <form method="post" class="quiz-form" id="quiz-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+    <section class="quiz-step active" data-step="1">
+      <span class="eyebrow">SEU PONTO DE PARTIDA</span><h1>Primeiro, vamos entender seu corpo</h1>
+      <p>Esses dados são usados para estimar seu gasto energético inicial.</p>
+      <div class="choice-grid two-choice">
+        <label class="choice-card"><input type="radio" name="sex" value="male" {% if s.sex != 'female' %}checked{% endif %}><b>Referência masculina</b><small>Usada somente na equação metabólica.</small></label>
+        <label class="choice-card"><input type="radio" name="sex" value="female" {% if s.sex == 'female' %}checked{% endif %}><b>Referência feminina</b><small>Usada somente na equação metabólica.</small></label>
+      </div>
+      <div class="quiz-fields three-fields">
+        <label>Idade<input type="number" name="age" min="18" max="90" value="{{ s.age }}" required><small>anos</small></label>
+        <label>Altura<input type="number" name="height_cm" min="130" max="230" step="0.1" value="{{ '%.0f'|format(s.height*100) }}" required><small>centímetros</small></label>
+        <label>Peso atual<input type="number" name="weight" min="35" max="300" step="0.1" value="{{ s.start_weight }}" required><small>quilogramas</small></label>
+      </div>
+    </section>
+
+    <section class="quiz-step" data-step="2">
+      <span class="eyebrow">OBJETIVO</span><h1>O que você quer conquistar?</h1>
+      <p>O TITAN adapta calorias, macros e ritmo conforme o objetivo.</p>
+      <div class="choice-grid">
+        <label class="choice-card"><input type="radio" name="goal_type" value="gain" {% if s.goal_type != 'loss' and s.goal_type != 'maintain' %}checked{% endif %}><b>Ganhar massa e peso</b><small>Superávit calórico moderado e foco em treino.</small></label>
+        <label class="choice-card"><input type="radio" name="goal_type" value="maintain" {% if s.goal_type == 'maintain' %}checked{% endif %}><b>Manter meu peso</b><small>Calorias próximas ao gasto diário estimado.</small></label>
+        <label class="choice-card"><input type="radio" name="goal_type" value="loss" {% if s.goal_type == 'loss' %}checked{% endif %}><b>Reduzir peso</b><small>Déficit gradual com proteção da massa muscular.</small></label>
+      </div>
+      <div class="quiz-fields goal-weight-wrap">
+        <label>Qual é sua meta final de peso?<input type="number" name="final_goal" min="35" max="300" step="0.1" value="{{ s.final_goal }}" required><small>O TITAN criará uma primeira etapa automaticamente.</small></label>
+      </div>
+    </section>
+
+    <section class="quiz-step" data-step="3">
+      <span class="eyebrow">ROTINA</span><h1>Como é seu nível de atividade?</h1>
+      <p>Considere trabalho, deslocamento, tarefas do dia e exercícios.</p>
+      <div class="choice-grid activity-grid">
+        {% for value,title,desc in [
+          ('sedentary','Sedentário','Trabalho sentado e quase nenhum exercício.'),
+          ('light','Levemente ativo','Caminhadas ou treino leve de 1 a 3 dias.'),
+          ('moderate','Moderadamente ativo','Treino de 3 a 5 dias e rotina movimentada.'),
+          ('high','Muito ativo','Treino intenso de 6 a 7 dias ou trabalho físico.'),
+          ('very_high','Extremamente ativo','Trabalho físico pesado e treino frequente.')
+        ] %}<label class="choice-card"><input type="radio" name="activity_level" value="{{ value }}" {% if s.activity_level==value %}checked{% elif not s.activity_level and value=='sedentary' %}checked{% endif %}><b>{{ title }}</b><small>{{ desc }}</small></label>{% endfor %}
+      </div>
+      <div class="quiz-fields"><label>Quantos dias pretende treinar por semana?<input type="range" name="training_days" min="0" max="7" value="{{ s.training_days or 0 }}" oninput="document.getElementById('training-output').textContent=this.value"><strong><span id="training-output">{{ s.training_days or 0 }}</span> dia(s)</strong></label></div>
+    </section>
+
+    <section class="quiz-step" data-step="4">
+      <span class="eyebrow">SUSTENTABILIDADE</span><h1>Agora vamos montar algo que você consiga seguir</h1>
+      <p>O melhor plano não é o mais agressivo, mas o que cabe na sua rotina.</p>
+      <h3>Como está seu apetite atualmente?</h3>
+      <div class="choice-grid">
+        <label class="choice-card"><input type="radio" name="appetite_level" value="low" {% if s.appetite_level!='normal' and s.appetite_level!='high' %}checked{% endif %}><b>Baixo</b><small>Perco a vontade de comer com facilidade.</small></label>
+        <label class="choice-card"><input type="radio" name="appetite_level" value="normal" {% if s.appetite_level=='normal' %}checked{% endif %}><b>Normal</b><small>Consigo manter refeições regulares.</small></label>
+        <label class="choice-card"><input type="radio" name="appetite_level" value="high" {% if s.appetite_level=='high' %}checked{% endif %}><b>Alto</b><small>Sinto fome com frequência.</small></label>
+      </div>
+      <div class="quiz-fields three-fields">
+        <label>Refeições possíveis por dia<select name="meals_per_day"><option value="3" {% if s.meals_per_day==3 %}selected{% endif %}>3 refeições</option><option value="4" {% if s.meals_per_day==4 %}selected{% endif %}>4 refeições</option><option value="5" {% if s.meals_per_day==5 %}selected{% endif %}>5 refeições</option><option value="6" {% if s.meals_per_day==6 %}selected{% endif %}>6 refeições</option></select></label>
+        <label>Ritmo desejado<select name="pace"><option value="slow">Conservador</option><option value="moderate" selected>Moderado</option><option value="fast">Mais acelerado</option></select></label>
+      </div>
+    </section>
+
+    <section class="quiz-step" data-step="5">
+      <span class="eyebrow">PLANEJAMENTO</span><h1>Por último, vamos respeitar seu orçamento</h1>
+      <p>Essas respostas ajudam o módulo de marmitas e compras.</p>
+      <div class="quiz-fields two-fields">
+        <label>Quanto pretende gastar por mês?<input type="number" name="budget_monthly" min="0" step="10" value="{{ s.budget_monthly or 0 }}"><small>Deixe zero para calcular depois.</small></label>
+        <label>Restrições ou alimentos que evita<textarea name="restrictions" placeholder="Ex.: lactose, não gosto de peixe, evito determinado alimento...">{{ s.restrictions or '' }}</textarea><small>O TITAN apenas registra essa preferência; não faz diagnóstico.</small></label>
+      </div>
+      <div class="calculation-preview"><b>O TITAN calculará automaticamente</b><span>TMB e gasto diário</span><span>Calorias para o objetivo</span><span>Proteína, carboidratos e gorduras</span><span>Água e ritmo semanal</span><span>Primeira etapa e previsão inicial</span><span>Horários de refeições</span></div>
+      <div class="notice"><p>Os resultados são estimativas iniciais. O sistema melhora as recomendações conforme você registra peso e alimentação. Procure um profissional em caso de condição clínica, perda de peso inexplicada ou sintomas persistentes.</p></div>
+    </section>
+
+    <div class="quiz-actions"><button type="button" class="button ghost" id="prev-step" disabled>Voltar</button><button type="button" id="next-step">Continuar</button><button type="submit" id="submit-quiz" hidden>Calcular meu plano</button></div>
+  </form>
+</section>
+{% endblock %}{% block scripts %}<script>
+(() => {
+  const steps=[...document.querySelectorAll('.quiz-step')], markers=[...document.querySelectorAll('[data-quiz-marker]')], next=document.getElementById('next-step'), prev=document.getElementById('prev-step'), submit=document.getElementById('submit-quiz'), progress=document.getElementById('quiz-progress-bar'), number=document.getElementById('step-number');
+  let current=0;
+  function render(){steps.forEach((s,i)=>s.classList.toggle('active',i===current));markers.forEach((marker,i)=>{marker.classList.toggle('current',i===current);marker.classList.toggle('complete',i<current);});number.textContent=current+1;progress.style.width=((current+1)/steps.length*100)+'%';prev.disabled=current===0;next.hidden=current===steps.length-1;submit.hidden=current!==steps.length-1;window.scrollTo({top:0,behavior:'smooth'});}
+  function validStep(){const fields=[...steps[current].querySelectorAll('input,select,textarea')];for(const field of fields){if(!field.checkValidity()){field.reportValidity();return false;}}const radios=[...new Set(fields.filter(x=>x.type==='radio').map(x=>x.name))];for(const name of radios){if(!steps[current].querySelector(`input[name="${name}"]:checked`)){alert('Selecione uma opção para continuar.');return false;}}return true;}
+  next.addEventListener('click',()=>{if(validStep()&&current<steps.length-1){current++;render();}});prev.addEventListener('click',()=>{if(current>0){current--;render();}});
+  document.querySelectorAll('.choice-card input').forEach(input=>input.addEventListener('change',()=>{document.querySelectorAll(`input[name="${input.name}"]`).forEach(x=>x.closest('.choice-card').classList.toggle('selected',x.checked));}));
+  document.querySelectorAll('.choice-card input:checked').forEach(x=>x.closest('.choice-card').classList.add('selected'));
+  document.getElementById('quiz-form').addEventListener('submit',e=>{if(!validStep())e.preventDefault();});render();
+})();
+</script>{% endblock %}

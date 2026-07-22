@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Criar conta segura • TITAN{% endblock %}
+{% block content %}
+<section class="auth-card auth-card-wide">
+  <div class="auth-logo">TITAN<span>EVOLUÇÃO FÍSICA</span></div>
+  <div class="secure-heading"><span aria-hidden="true">✓</span><div><small>CADASTRO PROTEGIDO</small><h1>Inicie seu projeto</h1></div></div>
+  <p class="muted">Crie uma senha forte. Depois enviaremos um código de 6 dígitos para confirmar seu e-mail.</p>
+  <form method="post" class="form" id="register-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <label>Nome<input name="name" value="{{ form_name or '' }}" required autocomplete="name"></label>
+    <label>E-mail<input type="email" name="email" value="{{ form_email or '' }}" required autocomplete="email"></label>
+    <label>Senha
+      <div class="password-field"><input type="password" name="password" id="new-password" minlength="10" required autocomplete="new-password" aria-describedby="password-rules"><button type="button" class="password-toggle" data-password-toggle="new-password" aria-label="Mostrar senha">Mostrar</button></div>
+    </label>
+    <div class="password-strength" aria-hidden="true"><i id="password-strength-bar"></i></div>
+    <ul class="password-rules" id="password-rules" aria-label="Requisitos da senha">
+      <li data-rule="length"><i>•</i>Pelo menos 10 caracteres</li>
+      <li data-rule="lower"><i>•</i>Uma letra minúscula</li>
+      <li data-rule="upper"><i>•</i>Uma letra maiúscula</li>
+      <li data-rule="number"><i>•</i>Um número</li>
+      <li data-rule="symbol"><i>•</i>Um símbolo, como @ # ! %</li>
+      <li data-rule="not_obvious"><i>•</i>Sem seu nome, e-mail ou sequência óbvia</li>
+    </ul>
+    <label>Confirmar senha
+      <div class="password-field"><input type="password" name="password_confirm" id="confirm-password" minlength="10" required autocomplete="new-password"><button type="button" class="password-toggle" data-password-toggle="confirm-password" aria-label="Mostrar confirmação da senha">Mostrar</button></div>
+      <small class="field-feedback" id="password-match" aria-live="polite"></small>
+    </label>
+    <button id="create-account" disabled>Criar conta e confirmar e-mail</button>
+  </form>
+  <p class="auth-security-note">O TITAN nunca envia sua senha por e-mail. O código serve apenas para confirmar que o endereço pertence a você.</p>
+  <p class="auth-switch">Já possui conta? <a href="{{ url_for('login') }}">Entrar</a></p>
+</section>
+{% endblock %}
+{% block scripts %}<script>
+(()=>{
+  const password=document.getElementById('new-password');
+  const confirmation=document.getElementById('confirm-password');
+  const submit=document.getElementById('create-account');
+  const name=document.querySelector('input[name="name"]');
+  const email=document.querySelector('input[name="email"]');
+  const feedback=document.getElementById('password-match');
+  const strength=document.getElementById('password-strength-bar');
+  const ruleElements=Object.fromEntries([...document.querySelectorAll('[data-rule]')].map(item=>[item.dataset.rule,item]));
+
+  function checks(){
+    const value=password.value;
+    const lowered=value.toLocaleLowerCase();
+    const parts=(name.value.match(/[\p{L}\p{N}_]+/gu)||[]).filter(part=>part.length>=3).map(part=>part.toLocaleLowerCase());
+    const emailName=email.value.split('@')[0].toLocaleLowerCase();
+    if(emailName.length>=3)parts.push(emailName);
+    const obvious=['123456','abcdef','qwerty','senha','password','admin','titan'];
+    return {
+      length:value.length>=10,
+      lower:[...value].some(char=>char===char.toLocaleLowerCase()&&char!==char.toLocaleUpperCase()),
+      upper:[...value].some(char=>char===char.toLocaleUpperCase()&&char!==char.toLocaleLowerCase()),
+      number:/\d/.test(value),
+      symbol:[...value].some(char=>!/[\p{L}\p{N}\s]/u.test(char)),
+      not_obvious:!obvious.some(part=>lowered.includes(part))&&!parts.some(part=>lowered.includes(part))&&new Set([...lowered]).size>=6
+    };
+  }
+
+  function update(){
+    const result=checks();
+    Object.entries(result).forEach(([key,passed])=>{
+      ruleElements[key].classList.toggle('passed',passed);
+      ruleElements[key].querySelector('i').textContent=passed?'✓':'•';
+    });
+    const score=Object.values(result).filter(Boolean).length;
+    strength.style.width=(score/Object.keys(result).length*100)+'%';
+    strength.dataset.score=score;
+    const matches=password.value&&password.value===confirmation.value;
+    feedback.textContent=confirmation.value?(matches?'As senhas correspondem.':'As senhas ainda não correspondem.'):'Repita exatamente a mesma senha.';
+    feedback.classList.toggle('good',Boolean(matches));
+    submit.disabled=!(Object.values(result).every(Boolean)&&matches&&name.value.trim().length>=2&&email.validity.valid);
+  }
+
+  [password,confirmation,name,email].forEach(input=>input.addEventListener('input',update));
+  document.querySelectorAll('[data-password-toggle]').forEach(button=>button.addEventListener('click',()=>{
+    const input=document.getElementById(button.dataset.passwordToggle);
+    const showing=input.type==='text';
+    input.type=showing?'password':'text';
+    button.textContent=showing?'Mostrar':'Ocultar';
+    button.setAttribute('aria-label',showing?'Mostrar senha':'Ocultar senha');
+  }));
+  update();
+})();
+</script>{% endblock %}
