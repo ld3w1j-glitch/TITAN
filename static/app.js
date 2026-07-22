@@ -48,3 +48,22 @@ function activateNotifications(){
     });
   },30000);
 })();
+
+(function foodSearch(){
+  const input=document.querySelector('[data-food-search]');
+  const grid=document.querySelector('[data-food-grid]');
+  const empty=document.querySelector('[data-food-empty]');
+  if(!input||!grid)return;
+  const cards=[...grid.querySelectorAll('[data-food-name]')];
+  const normalize=value=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase().trim();
+  input.addEventListener('input',()=>{
+    const query=normalize(input.value);
+    let visible=0;
+    cards.forEach(card=>{
+      const show=normalize(card.dataset.foodName).includes(query);
+      card.hidden=!show;
+      if(show)visible+=1;
+    });
+    if(empty)empty.hidden=visible!==0;
+  });
+})();

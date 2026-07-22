@@ -237,7 +237,7 @@ def send_brevo_api(
             "accept": "application/json",
             "api-key": api_key,
             "content-type": "application/json",
-            "user-agent": "Projeto-TITAN/3.6",
+            "user-agent": "Projeto-TITAN/3.7",
         },
     )
     try:
@@ -590,12 +590,24 @@ def init_db() -> None:
         if "email_verified" not in user_columns:
             db.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1")
 
+        # Migração V3.7: mantém todos os alimentos e apenas acrescenta favoritos.
+        food_columns = {row["name"] for row in db.execute("PRAGMA table_info(foods)").fetchall()}
+        if "favorite" not in food_columns:
+            db.execute("ALTER TABLE foods ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
+
 
 init_db()
 
 
 def today() -> str:
     return date.today().isoformat()
+
+
+def tracking_day(value: str | None) -> str:
+    try:
+        return date.fromisoformat(value or "").isoformat()
+    except ValueError:
+        return today()
 
 
 def current_user_id() -> int:
@@ -713,6 +725,125 @@ def daily_totals(db: sqlite3.Connection, user_id: int, day: str) -> dict:
         WHERE m.user_id=? AND m.day=?
     """, (user_id, day)).fetchone()
     return dict(row)
+
+
+def quick_food_choices(db: sqlite3.Connection, user_id: int, limit: int = 6) -> list[dict]:
+    """Favoritos primeiro, seguidos pelos alimentos usados mais recentemente."""
+    favorites = db.execute(
+        "SELECT * FROM foods WHERE user_id=? AND favorite=1 ORDER BY name", (user_id,)
+    ).fetchall()
+    recent_meals = db.execute("""
+        SELECT m.food_id,m.quantity,m.meal_type,f.*
+        FROM meals m JOIN foods f ON f.id=m.food_id
+        WHERE m.user_id=? ORDER BY m.day DESC,m.id DESC LIMIT 100
+    """, (user_id,)).fetchall()
+    fallback = db.execute(
+        "SELECT * FROM foods WHERE user_id=? ORDER BY name", (user_id,)
+    ).fetchall()
+
+    result: list[dict] = []
+    seen: set[int] = set()
+    recent_by_food: dict[int, sqlite3.Row] = {}
+    for row in recent_meals:
+        recent_by_food.setdefault(row["food_id"], row)
+
+    def add_food(row, usage=None):
+        food_id = int(row["id"])
+        if food_id in seen or len(result) >= limit:
+            return
+        item = dict(row)
+        item["quick_quantity"] = usage["quantity"] if usage else row["serving"]
+        item["quick_meal_type"] = usage["meal_type"] if usage else "Refeição"
+        result.append(item)
+        seen.add(food_id)
+
+    for row in favorites:
+        add_food(row, recent_by_food.get(row["id"]))
+    for row in recent_meals:
+        add_food(row, row)
+    for row in fallback:
+        add_food(row, recent_by_food.get(row["id"]))
+    return result
+
+
+def weekly_summary(db: sqlite3.Connection, user_id: int, settings, anchor_day: str) -> dict:
+    """Compara os sete dias encerrados na data escolhida com a semana anterior."""
+    anchor = date.fromisoformat(anchor_day)
+    current_start = anchor - timedelta(days=6)
+    previous_start = anchor - timedelta(days=13)
+    previous_end = anchor - timedelta(days=7)
+
+    def nutrition_between(start: date, end: date) -> dict:
+        rows = db.execute("""
+            SELECT m.day,
+                   SUM(f.calories*m.quantity/f.serving) calories,
+                   SUM(f.protein*m.quantity/f.serving) protein
+            FROM meals m JOIN foods f ON f.id=m.food_id
+            WHERE m.user_id=? AND m.day BETWEEN ? AND ?
+            GROUP BY m.day ORDER BY m.day
+        """, (user_id, start.isoformat(), end.isoformat())).fetchall()
+        days = len(rows)
+        calories = sum(row["calories"] or 0 for row in rows)
+        protein = sum(row["protein"] or 0 for row in rows)
+        target_days = sum(
+            1 for row in rows
+            if settings["calories"] * .9 <= (row["calories"] or 0) <= settings["calories"] * 1.1
+        )
+        return {
+            "days": days,
+            "avg_calories": calories / days if days else 0,
+            "avg_protein": protein / days if days else 0,
+            "target_days": target_days,
+        }
+
+    current = nutrition_between(current_start, anchor)
+    previous = nutrition_between(previous_start, previous_end)
+    habits = db.execute("""
+        SELECT COUNT(*) days,AVG(NULLIF(water,0)) water,AVG(NULLIF(sleep,0)) sleep,SUM(trained) trained
+        FROM habits WHERE user_id=? AND day BETWEEN ? AND ?
+    """, (user_id, current_start.isoformat(), anchor.isoformat())).fetchone()
+    week_weights = db.execute("""
+        SELECT day,weight FROM weights
+        WHERE user_id=? AND day BETWEEN ? AND ? ORDER BY day
+    """, (user_id, current_start.isoformat(), anchor.isoformat())).fetchall()
+
+    comparison = "Registre pelo menos três dias para liberar uma comparação mais confiável."
+    comparison_level = "info"
+    if current["days"] >= 3:
+        if previous["days"]:
+            calorie_change = current["avg_calories"] - previous["avg_calories"]
+            protein_change = current["avg_protein"] - previous["avg_protein"]
+            comparison = (
+                f"Em relação à semana anterior: {calorie_change:+.0f} kcal e "
+                f"{protein_change:+.0f} g de proteína por dia registrado."
+            )
+        elif current["avg_calories"] < settings["calories"] * .85:
+            comparison = "Sua média calórica ainda está abaixo da meta. Tente aumentar gradualmente a consistência."
+            comparison_level = "warn"
+        elif current["avg_protein"] < settings["protein"] * .85:
+            comparison = "As calorias estão próximas, mas a proteína ainda pode melhorar nesta semana."
+            comparison_level = "warn"
+        else:
+            comparison = "Boa semana: suas médias registradas estão próximas das metas configuradas."
+            comparison_level = "good"
+
+    weight_change = None
+    if len(week_weights) >= 2:
+        weight_change = week_weights[-1]["weight"] - week_weights[0]["weight"]
+
+    return {
+        **current,
+        "period": f"{current_start.strftime('%d/%m')} a {anchor.strftime('%d/%m')}",
+        "calorie_percent": current["avg_calories"] / settings["calories"] * 100 if settings["calories"] else 0,
+        "protein_percent": current["avg_protein"] / settings["protein"] * 100 if settings["protein"] else 0,
+        "habit_days": habits["days"] or 0,
+        "avg_water": habits["water"] or 0,
+        "avg_sleep": habits["sleep"] or 0,
+        "training_days": habits["trained"] or 0,
+        "weight_change": weight_change,
+        "comparison": comparison,
+        "comparison_level": comparison_level,
+    }
 
 
 def weight_predictions(weights, milestones=(70,75,80,85)) -> tuple[list[dict], float | None]:
@@ -1325,19 +1456,25 @@ def onboarding_result():
 @login_required
 def dashboard():
     user_id = current_user_id()
-    day = request.args.get("day", today())
+    day = tracking_day(request.args.get("day", today()))
+    previous_day = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
     with db_conn() as db:
         s = get_settings(db, user_id)
         totals = daily_totals(db, user_id, day)
         meals = db.execute("""SELECT m.*,f.name,f.serving,f.unit,f.calories,f.protein,f.carbs,f.fat,f.fiber
                               FROM meals m JOIN foods f ON f.id=m.food_id
                               WHERE m.user_id=? AND m.day=? ORDER BY m.id DESC""", (user_id, day)).fetchall()
-        foods = db.execute("SELECT * FROM foods WHERE user_id=? ORDER BY name", (user_id,)).fetchall()
+        foods = db.execute("SELECT * FROM foods WHERE user_id=? ORDER BY favorite DESC,name", (user_id,)).fetchall()
         weights = db.execute("SELECT day,weight FROM weights WHERE user_id=? ORDER BY day", (user_id,)).fetchall()
         latest_weight = weights[-1]["weight"] if weights else s["start_weight"]
         habit = db.execute("SELECT * FROM habits WHERE user_id=? AND day=?", (user_id, day)).fetchone()
         workouts = db.execute("""SELECT w.*,e.name exercise FROM workouts w JOIN exercises e ON e.id=w.exercise_id
                                WHERE w.user_id=? AND w.day=? ORDER BY w.id DESC""", (user_id, day)).fetchall()
+        previous_meals = db.execute(
+            "SELECT COUNT(*) total FROM meals WHERE user_id=? AND day=?", (user_id, previous_day)
+        ).fetchone()["total"]
+        quick_foods = quick_food_choices(db, user_id)
+        week = weekly_summary(db, user_id, s, day)
         insights = automatic_insights(db, user_id, s, weights)
         predictions, weekly_rate = weight_predictions(weights)
     bmi = latest_weight / max(.1, s["height"] ** 2)
@@ -1346,7 +1483,9 @@ def dashboard():
     return render_template("dashboard.html", s=s, totals=totals, meals=meals, foods_all=foods,
                            day=day, weights=weights, latest_weight=latest_weight, habit=habit,
                            workouts=workouts, insights=insights, predictions=predictions,
-                           weekly_rate=weekly_rate, bmi=bmi, progress=progress)
+                           weekly_rate=weekly_rate, bmi=bmi, progress=progress,
+                           quick_foods=quick_foods, previous_meals=previous_meals,
+                           previous_day=previous_day, week=week)
 
 
 @app.route("/foods", methods=["GET", "POST"])
@@ -1355,30 +1494,43 @@ def foods():
     user_id = current_user_id()
     with db_conn() as db:
         if request.method == "POST":
+            try:
+                serving = float(request.form["serving"])
+                nutrients = [float(request.form.get(key) or 0) for key in ("calories", "protein", "carbs", "fat", "fiber")]
+            except (KeyError, ValueError):
+                flash("Preencha os valores nutricionais usando números válidos.")
+                return redirect(url_for("foods"))
+            if serving <= 0 or any(value < 0 for value in nutrients):
+                flash("A porção deve ser maior que zero e os nutrientes não podem ser negativos.")
+                return redirect(url_for("foods"))
             db.execute("""INSERT INTO foods(user_id,name,serving,unit,calories,protein,carbs,fat,fiber)
                           VALUES(?,?,?,?,?,?,?,?,?)""", (
-                user_id, request.form["name"].strip(), float(request.form["serving"]),
-                request.form["unit"], float(request.form["calories"]),
-                float(request.form.get("protein") or 0), float(request.form.get("carbs") or 0),
-                float(request.form.get("fat") or 0), float(request.form.get("fiber") or 0)
+                user_id, request.form["name"].strip(), serving, request.form["unit"], *nutrients
             ))
             db.commit()
             flash("Alimento cadastrado com informações nutricionais.")
             return redirect(url_for("foods"))
-        rows = db.execute("SELECT * FROM foods WHERE user_id=? ORDER BY name", (user_id,)).fetchall()
+        rows = db.execute("SELECT * FROM foods WHERE user_id=? ORDER BY favorite DESC,name", (user_id,)).fetchall()
     return render_template("foods.html", foods=rows)
 
 
 @app.post("/foods/edit/<int:item_id>")
 @login_required
 def edit_food(item_id):
+    try:
+        serving = float(request.form["serving"])
+        nutrients = [float(request.form.get(key) or 0) for key in ("calories", "protein", "carbs", "fat", "fiber")]
+    except (KeyError, ValueError):
+        flash("Preencha os valores nutricionais usando números válidos.")
+        return redirect(url_for("foods"))
+    if serving <= 0 or any(value < 0 for value in nutrients):
+        flash("A porção deve ser maior que zero e os nutrientes não podem ser negativos.")
+        return redirect(url_for("foods"))
     with db_conn() as db:
         db.execute("""UPDATE foods SET name=?,serving=?,unit=?,calories=?,protein=?,carbs=?,fat=?,fiber=?
                       WHERE id=? AND user_id=?""", (
-            request.form["name"].strip(), float(request.form["serving"]), request.form["unit"],
-            float(request.form["calories"]), float(request.form.get("protein") or 0),
-            float(request.form.get("carbs") or 0), float(request.form.get("fat") or 0),
-            float(request.form.get("fiber") or 0), item_id, current_user_id()
+            request.form["name"].strip(), serving, request.form["unit"],
+            *nutrients, item_id, current_user_id()
         ))
         db.commit()
     flash("Informações do alimento atualizadas.")
@@ -1399,19 +1551,130 @@ def delete_food(item_id):
     return redirect(url_for("foods"))
 
 
+@app.post("/foods/favorite/<int:item_id>")
+@login_required
+def favorite_food(item_id):
+    with db_conn() as db:
+        food = db.execute(
+            "SELECT favorite FROM foods WHERE id=? AND user_id=?", (item_id, current_user_id())
+        ).fetchone()
+        if not food:
+            abort(404)
+        favorite = 0 if food["favorite"] else 1
+        db.execute(
+            "UPDATE foods SET favorite=? WHERE id=? AND user_id=?",
+            (favorite, item_id, current_user_id()),
+        )
+        db.commit()
+    flash("Alimento adicionado aos favoritos." if favorite else "Alimento removido dos favoritos.")
+    if request.form.get("return_to") == "dashboard":
+        return redirect(url_for("dashboard", day=tracking_day(request.form.get("day"))))
+    return redirect(url_for("foods"))
+
+
 @app.post("/meal")
 @login_required
 def add_meal():
+    day = tracking_day(request.form.get("day"))
+    try:
+        quantity = float(request.form["quantity"])
+    except (KeyError, ValueError):
+        quantity = 0
+    if quantity <= 0:
+        flash("Informe uma quantidade maior que zero.")
+        return redirect(url_for("dashboard", day=day))
     with db_conn() as db:
         food = db.execute("SELECT id FROM foods WHERE id=? AND user_id=?", (request.form["food_id"], current_user_id())).fetchone()
         if not food:
             abort(404)
         db.execute("INSERT INTO meals(user_id,day,meal_type,food_id,quantity) VALUES(?,?,?,?,?)", (
-            current_user_id(), request.form["day"], request.form.get("meal_type", "Refeição"),
-            food["id"], float(request.form["quantity"])
+            current_user_id(), day, request.form.get("meal_type", "Refeição"),
+            food["id"], quantity
         ))
         db.commit()
-    return redirect(url_for("dashboard", day=request.form["day"]))
+    flash("Refeição registrada e metas atualizadas.")
+    return redirect(url_for("dashboard", day=day))
+
+
+@app.post("/meal/repeat-yesterday")
+@login_required
+def repeat_yesterday_meals():
+    day = tracking_day(request.form.get("day"))
+    source_day = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
+    with db_conn() as db:
+        existing = db.execute(
+            "SELECT COUNT(*) total FROM meals WHERE user_id=? AND day=?",
+            (current_user_id(), day),
+        ).fetchone()["total"]
+        if existing:
+            flash("Para evitar refeições duplicadas, repita o dia anterior somente quando o dia atual estiver vazio.")
+            return redirect(url_for("dashboard", day=day))
+        source = db.execute("""
+            SELECT meal_type,food_id,quantity FROM meals
+            WHERE user_id=? AND day=? ORDER BY id
+        """, (current_user_id(), source_day)).fetchall()
+        if not source:
+            flash("Não há refeições registradas no dia anterior para repetir.")
+            return redirect(url_for("dashboard", day=day))
+        db.executemany(
+            "INSERT INTO meals(user_id,day,meal_type,food_id,quantity) VALUES(?,?,?,?,?)",
+            [(current_user_id(), day, row["meal_type"], row["food_id"], row["quantity"]) for row in source],
+        )
+        db.commit()
+    flash(f"{len(source)} refeição(ões) do dia anterior foram copiadas. Você pode ajustar qualquer item.")
+    return redirect(url_for("dashboard", day=day))
+
+
+@app.post("/habit/quick")
+@login_required
+def quick_habit():
+    day = tracking_day(request.form.get("day"))
+    action = request.form.get("action")
+    with db_conn() as db:
+        current = db.execute(
+            "SELECT * FROM habits WHERE user_id=? AND day=?", (current_user_id(), day)
+        ).fetchone()
+        water = current["water"] if current else 0
+        sleep = current["sleep"] if current else 0
+        trained = current["trained"] if current else 0
+        appetite = current["appetite"] if current else 0
+        if action == "water":
+            water = min(10, water + .25)
+            message = f"Água atualizada para {water:.2f} L."
+        elif action == "trained":
+            trained = 1
+            message = "Treino marcado como concluído."
+        else:
+            abort(400)
+        db.execute("""
+            INSERT INTO habits(user_id,day,water,sleep,trained,appetite) VALUES(?,?,?,?,?,?)
+            ON CONFLICT(user_id,day) DO UPDATE SET water=excluded.water,sleep=excluded.sleep,
+            trained=excluded.trained,appetite=excluded.appetite
+        """, (current_user_id(), day, water, sleep, trained, appetite))
+        db.commit()
+    flash(message)
+    return redirect(url_for("dashboard", day=day))
+
+
+@app.post("/progress/quick-weight")
+@login_required
+def quick_weight():
+    day = tracking_day(request.form.get("day"))
+    try:
+        weight = float(request.form.get("weight", 0))
+    except ValueError:
+        weight = 0
+    if not 25 <= weight <= 350:
+        flash("Informe um peso válido entre 25 e 350 kg.")
+        return redirect(url_for("dashboard", day=day))
+    with db_conn() as db:
+        db.execute(
+            "INSERT OR REPLACE INTO weights(user_id,day,weight) VALUES(?,?,?)",
+            (current_user_id(), day, weight),
+        )
+        db.commit()
+    flash("Peso registrado. As previsões foram recalculadas.")
+    return redirect(url_for("dashboard", day=day))
 
 
 @app.post("/meal/delete/<int:item_id>")

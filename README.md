@@ -1,6 +1,15 @@
-# Projeto TITAN V3.6 — Códigos pela API gratuita da Brevo
+# Projeto TITAN V3.7 — Uso rápido + Resumo semanal
 
 Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. Ela mantém kcal e macros por alimento e por refeição e acrescenta login, fotos, previsões, análise automática, comparador de mercados, calendário, exercícios com mídia e deploy no Railway.
+
+## Novidades da V3.7
+- **Modo rápido** no painel para adicionar 250 ml de água, marcar o treino e registrar o peso;
+- repetição segura das refeições do dia anterior quando o dia atual está vazio;
+- alimentos favoritos e usados recentemente com quantidade sugerida pela última utilização;
+- pesquisa instantânea na base de alimentos;
+- resumo dos últimos sete dias com consistência, médias de calorias, proteína, água, sono e treinos;
+- comparação com a semana anterior quando existem registros suficientes;
+- migração automática do banco da V3.6, sem apagar usuários ou dados existentes.
 
 ## Segurança da conta
 - toda conta nova precisa confirmar o endereço com um código de 6 dígitos;
@@ -44,6 +53,13 @@ Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. 
    - `BREVO_SENDER_EMAIL`: o endereço que aparece como **Verificado** na área de remetentes.
    - `BREVO_SENDER_NAME=TITAN`
 5. Gere um domínio público.
+
+## Atualizar sem perder usuários
+Ao publicar uma nova versão no mesmo serviço do Railway, mantenha o Volume montado em `/data` e preserve estas variáveis:
+- `DB_PATH=/data/titan.db`
+- `UPLOAD_PATH=/data/uploads`
+
+O ZIP do projeto não contém banco de dados e, portanto, não substitui os usuários existentes. A V3.7 detecta o banco anterior e adiciona somente a estrutura necessária para favoritos. Não apague o Volume, não altere o caminho `/data` e não crie outro serviço se a intenção for apenas atualizar o TITAN.
 
 Nunca envie o arquivo `.env` nem a chave da Brevo ao GitHub ou em conversas. Cadastre os valores diretamente na área **Variables** do serviço no Railway. O endereço de `BREVO_SENDER_EMAIL` precisa ser exatamente o remetente verificado na Brevo.
 
