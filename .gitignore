@@ -1,9 +1,0 @@
-__pycache__/
-*.py[cod]
-.env
-venv/
-.venv/
-titan.db
-titan.db-*
-uploads/*
-!uploads/.gitkeep

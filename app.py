@@ -55,6 +55,7 @@ ALLOWED_IMAGES = {"png", "jpg", "jpeg", "webp"}
 VERIFICATION_TTL_MINUTES = 10
 VERIFICATION_MAX_ATTEMPTS = 5
 VERIFICATION_RESEND_SECONDS = 60
+UNDO_TTL_SECONDS = 10 * 60
 
 
 @app.after_request
@@ -237,7 +238,7 @@ def send_brevo_api(
             "accept": "application/json",
             "api-key": api_key,
             "content-type": "application/json",
-            "user-agent": "Projeto-TITAN/3.7",
+            "user-agent": "Projeto-TITAN/3.8",
         },
     )
     try:
@@ -614,6 +615,18 @@ def current_user_id() -> int:
     return int(session["user_id"])
 
 
+def remember_undo(kind: str, payload: dict, message: str, return_to: str = "dashboard") -> None:
+    """Guarda somente a última ação reversível na sessão assinada do usuário."""
+    session["last_undo"] = {
+        "kind": kind,
+        "payload": payload,
+        "user_id": current_user_id(),
+        "created_at": int(utc_now().timestamp()),
+        "return_to": return_to if return_to in {"dashboard", "foods"} else "dashboard",
+    }
+    flash(message, "undo")
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -621,6 +634,92 @@ def login_required(view):
             return redirect(url_for("login", next=request.path))
         return view(*args, **kwargs)
     return wrapped
+
+
+@app.post("/desfazer")
+@login_required
+def undo_last_action():
+    undo = session.pop("last_undo", None)
+    if not undo or undo.get("user_id") != current_user_id():
+        flash("Não há nenhuma ação recente para desfazer.")
+        return redirect(url_for("dashboard"))
+    if int(utc_now().timestamp()) - int(undo.get("created_at", 0)) > UNDO_TTL_SECONDS:
+        flash("O tempo para desfazer essa ação terminou.")
+        return redirect(url_for("dashboard"))
+
+    kind = undo.get("kind")
+    payload = undo.get("payload") or {}
+    day = tracking_day(payload.get("day"))
+    restored = False
+    try:
+        with db_conn() as db:
+            if kind == "meal_add":
+                db.execute(
+                    "DELETE FROM meals WHERE id=? AND user_id=?",
+                    (int(payload["id"]), current_user_id()),
+                )
+                restored = True
+            elif kind == "repeat_meals":
+                for meal_id in payload.get("ids", [])[:100]:
+                    db.execute(
+                        "DELETE FROM meals WHERE id=? AND user_id=?",
+                        (int(meal_id), current_user_id()),
+                    )
+                restored = True
+            elif kind == "meal_delete":
+                meal = payload["meal"]
+                db.execute("""
+                    INSERT INTO meals(id,user_id,day,meal_type,food_id,quantity)
+                    VALUES(?,?,?,?,?,?)
+                """, (
+                    int(meal["id"]), current_user_id(), meal["day"], meal["meal_type"],
+                    int(meal["food_id"]), float(meal["quantity"]),
+                ))
+                restored = True
+            elif kind == "habit_restore":
+                previous = payload.get("previous")
+                if previous:
+                    db.execute("""
+                        INSERT INTO habits(user_id,day,water,sleep,trained,appetite) VALUES(?,?,?,?,?,?)
+                        ON CONFLICT(user_id,day) DO UPDATE SET water=excluded.water,sleep=excluded.sleep,
+                        trained=excluded.trained,appetite=excluded.appetite
+                    """, (
+                        current_user_id(), day, float(previous["water"]), float(previous["sleep"]),
+                        int(previous["trained"]), int(previous["appetite"]),
+                    ))
+                else:
+                    db.execute(
+                        "DELETE FROM habits WHERE user_id=? AND day=?", (current_user_id(), day)
+                    )
+                restored = True
+            elif kind == "weight_restore":
+                previous = payload.get("previous")
+                if previous is None:
+                    db.execute(
+                        "DELETE FROM weights WHERE user_id=? AND day=?", (current_user_id(), day)
+                    )
+                else:
+                    db.execute(
+                        "INSERT OR REPLACE INTO weights(user_id,day,weight) VALUES(?,?,?)",
+                        (current_user_id(), day, float(previous)),
+                    )
+                restored = True
+            elif kind == "favorite_restore":
+                db.execute(
+                    "UPDATE foods SET favorite=? WHERE id=? AND user_id=?",
+                    (int(payload["previous"]), int(payload["food_id"]), current_user_id()),
+                )
+                restored = True
+            if restored:
+                db.commit()
+    except (KeyError, TypeError, ValueError, sqlite3.Error):
+        app.logger.exception("Não foi possível desfazer a última ação.")
+        restored = False
+
+    flash("Ação desfeita. Os dados anteriores foram restaurados." if restored else "Não foi possível desfazer essa ação.")
+    if undo.get("return_to") == "foods":
+        return redirect(url_for("foods"))
+    return redirect(url_for("dashboard", day=day))
 
 
 def csrf_token() -> str:
@@ -1554,6 +1653,8 @@ def delete_food(item_id):
 @app.post("/foods/favorite/<int:item_id>")
 @login_required
 def favorite_food(item_id):
+    return_to = "dashboard" if request.form.get("return_to") == "dashboard" else "foods"
+    day = tracking_day(request.form.get("day"))
     with db_conn() as db:
         food = db.execute(
             "SELECT favorite FROM foods WHERE id=? AND user_id=?", (item_id, current_user_id())
@@ -1566,9 +1667,14 @@ def favorite_food(item_id):
             (favorite, item_id, current_user_id()),
         )
         db.commit()
-    flash("Alimento adicionado aos favoritos." if favorite else "Alimento removido dos favoritos.")
-    if request.form.get("return_to") == "dashboard":
-        return redirect(url_for("dashboard", day=tracking_day(request.form.get("day"))))
+    remember_undo(
+        "favorite_restore",
+        {"food_id": item_id, "previous": int(food["favorite"]), "day": day},
+        "Favorito atualizado.",
+        return_to,
+    )
+    if return_to == "dashboard":
+        return redirect(url_for("dashboard", day=day))
     return redirect(url_for("foods"))
 
 
@@ -1587,12 +1693,15 @@ def add_meal():
         food = db.execute("SELECT id FROM foods WHERE id=? AND user_id=?", (request.form["food_id"], current_user_id())).fetchone()
         if not food:
             abort(404)
-        db.execute("INSERT INTO meals(user_id,day,meal_type,food_id,quantity) VALUES(?,?,?,?,?)", (
+        cursor = db.execute("INSERT INTO meals(user_id,day,meal_type,food_id,quantity) VALUES(?,?,?,?,?)", (
             current_user_id(), day, request.form.get("meal_type", "Refeição"),
             food["id"], quantity
         ))
         db.commit()
-    flash("Refeição registrada e metas atualizadas.")
+    remember_undo(
+        "meal_add", {"id": cursor.lastrowid, "day": day},
+        "Refeição registrada e metas atualizadas."
+    )
     return redirect(url_for("dashboard", day=day))
 
 
@@ -1616,12 +1725,18 @@ def repeat_yesterday_meals():
         if not source:
             flash("Não há refeições registradas no dia anterior para repetir.")
             return redirect(url_for("dashboard", day=day))
-        db.executemany(
-            "INSERT INTO meals(user_id,day,meal_type,food_id,quantity) VALUES(?,?,?,?,?)",
-            [(current_user_id(), day, row["meal_type"], row["food_id"], row["quantity"]) for row in source],
-        )
+        inserted_ids = []
+        for row in source[:100]:
+            cursor = db.execute(
+                "INSERT INTO meals(user_id,day,meal_type,food_id,quantity) VALUES(?,?,?,?,?)",
+                (current_user_id(), day, row["meal_type"], row["food_id"], row["quantity"]),
+            )
+            inserted_ids.append(cursor.lastrowid)
         db.commit()
-    flash(f"{len(source)} refeição(ões) do dia anterior foram copiadas. Você pode ajustar qualquer item.")
+    remember_undo(
+        "repeat_meals", {"ids": inserted_ids, "day": day},
+        f"{len(inserted_ids)} refeição(ões) do dia anterior foram copiadas."
+    )
     return redirect(url_for("dashboard", day=day))
 
 
@@ -1634,6 +1749,7 @@ def quick_habit():
         current = db.execute(
             "SELECT * FROM habits WHERE user_id=? AND day=?", (current_user_id(), day)
         ).fetchone()
+        previous = dict(current) if current else None
         water = current["water"] if current else 0
         sleep = current["sleep"] if current else 0
         trained = current["trained"] if current else 0
@@ -1641,9 +1757,15 @@ def quick_habit():
         if action == "water":
             water = min(10, water + .25)
             message = f"Água atualizada para {water:.2f} L."
+        elif action == "water_remove":
+            water = max(0, water - .25)
+            message = f"Água corrigida para {water:.2f} L."
         elif action == "trained":
             trained = 1
             message = "Treino marcado como concluído."
+        elif action == "untrained":
+            trained = 0
+            message = "Treino desmarcado."
         else:
             abort(400)
         db.execute("""
@@ -1652,7 +1774,7 @@ def quick_habit():
             trained=excluded.trained,appetite=excluded.appetite
         """, (current_user_id(), day, water, sleep, trained, appetite))
         db.commit()
-    flash(message)
+    remember_undo("habit_restore", {"day": day, "previous": previous}, message)
     return redirect(url_for("dashboard", day=day))
 
 
@@ -1668,39 +1790,61 @@ def quick_weight():
         flash("Informe um peso válido entre 25 e 350 kg.")
         return redirect(url_for("dashboard", day=day))
     with db_conn() as db:
+        current = db.execute(
+            "SELECT weight FROM weights WHERE user_id=? AND day=?", (current_user_id(), day)
+        ).fetchone()
         db.execute(
             "INSERT OR REPLACE INTO weights(user_id,day,weight) VALUES(?,?,?)",
             (current_user_id(), day, weight),
         )
         db.commit()
-    flash("Peso registrado. As previsões foram recalculadas.")
+    remember_undo(
+        "weight_restore", {"day": day, "previous": current["weight"] if current else None},
+        "Peso registrado. As previsões foram recalculadas."
+    )
     return redirect(url_for("dashboard", day=day))
 
 
 @app.post("/meal/delete/<int:item_id>")
 @login_required
 def delete_meal(item_id):
-    day = request.form["day"]
+    day = tracking_day(request.form.get("day"))
     with db_conn() as db:
+        meal = db.execute(
+            "SELECT * FROM meals WHERE id=? AND user_id=?", (item_id, current_user_id())
+        ).fetchone()
+        if not meal:
+            return redirect(url_for("dashboard", day=day))
         db.execute("DELETE FROM meals WHERE id=? AND user_id=?", (item_id, current_user_id()))
         db.commit()
+    remember_undo(
+        "meal_delete", {"day": day, "meal": dict(meal)},
+        "Refeição removida."
+    )
     return redirect(url_for("dashboard", day=day))
 
 
 @app.post("/habit")
 @login_required
 def save_habit():
+    day = tracking_day(request.form.get("day"))
     with db_conn() as db:
+        current = db.execute(
+            "SELECT * FROM habits WHERE user_id=? AND day=?", (current_user_id(), day)
+        ).fetchone()
         db.execute("""INSERT INTO habits(user_id,day,water,sleep,trained,appetite) VALUES(?,?,?,?,?,?)
                       ON CONFLICT(user_id,day) DO UPDATE SET water=excluded.water,sleep=excluded.sleep,
                       trained=excluded.trained,appetite=excluded.appetite""", (
-            current_user_id(), request.form["day"], float(request.form.get("water") or 0),
+            current_user_id(), day, float(request.form.get("water") or 0),
             float(request.form.get("sleep") or 0), 1 if request.form.get("trained") else 0,
             int(request.form.get("appetite") or 0)
         ))
         db.commit()
-    flash("Hábitos do dia atualizados.")
-    return redirect(url_for("dashboard", day=request.form["day"]))
+    remember_undo(
+        "habit_restore", {"day": day, "previous": dict(current) if current else None},
+        "Hábitos do dia atualizados."
+    )
+    return redirect(url_for("dashboard", day=day))
 
 
 @app.route("/progress", methods=["GET", "POST"])
