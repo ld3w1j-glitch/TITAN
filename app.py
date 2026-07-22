@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import hmac
 import math
 import os
+import re
 import secrets
+import smtplib
+import ssl
 import sqlite3
 import zipfile
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from email.message import EmailMessage
 from functools import wraps
+from html import escape as html_escape
 from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -16,6 +23,7 @@ from flask import (
     Flask, abort, flash, g, redirect, render_template, request,
     send_file, send_from_directory, session, url_for
 )
+from dotenv import load_dotenv
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
@@ -24,6 +32,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 VOLUME_DIR = Path(os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "")) if os.getenv("RAILWAY_VOLUME_MOUNT_PATH") else None
 DB_PATH = Path(os.getenv("DB_PATH", str((VOLUME_DIR / "titan.db") if VOLUME_DIR else (BASE_DIR / "titan.db"))))
 UPLOAD_DIR = Path(os.getenv("UPLOAD_PATH", str((VOLUME_DIR / "uploads") if VOLUME_DIR else (BASE_DIR / "uploads"))))
@@ -41,6 +50,172 @@ app.config.update(
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 ALLOWED_IMAGES = {"png", "jpg", "jpeg", "webp"}
+VERIFICATION_TTL_MINUTES = 10
+VERIFICATION_MAX_ATTEMPTS = 5
+VERIFICATION_RESEND_SECONDS = 60
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if request.is_secure:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    if request.endpoint in {"login", "register", "verify_email", "resend_verification"}:
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def parse_utc(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def password_requirements(password: str, name: str = "", email: str = "") -> dict[str, bool]:
+    lowered = password.casefold()
+    obvious = ("123456", "abcdef", "qwerty", "senha", "password", "admin", "titan")
+    personal_parts = [part.casefold() for part in re.findall(r"[\wÀ-ÿ]+", name) if len(part) >= 3]
+    email_name = email.split("@", 1)[0].casefold()
+    if len(email_name) >= 3:
+        personal_parts.append(email_name)
+    return {
+        "length": len(password) >= 10,
+        "lower": any(char.islower() for char in password),
+        "upper": any(char.isupper() for char in password),
+        "number": any(char.isdigit() for char in password),
+        "symbol": any(not char.isalnum() and not char.isspace() for char in password),
+        "not_obvious": (
+            not any(fragment in lowered for fragment in obvious)
+            and not any(part in lowered for part in personal_parts)
+            and len(set(lowered)) >= 6
+        ),
+    }
+
+
+def password_errors(password: str, name: str = "", email: str = "") -> list[str]:
+    checks = password_requirements(password, name, email)
+    labels = {
+        "length": "pelo menos 10 caracteres",
+        "lower": "uma letra minúscula",
+        "upper": "uma letra maiúscula",
+        "number": "um número",
+        "symbol": "um símbolo",
+        "not_obvious": "não usar nome, e-mail ou sequência óbvia",
+    }
+    return [labels[key] for key, passed in checks.items() if not passed]
+
+
+def mask_email(email: str) -> str:
+    local, _, domain = email.partition("@")
+    if len(local) <= 2:
+        visible = local[:1] + "*" * max(1, len(local) - 1)
+    else:
+        visible = local[0] + "*" * (len(local) - 2) + local[-1]
+    return f"{visible}@{domain}"
+
+
+def safe_next_url(value: str | None) -> str | None:
+    if value and value.startswith("/") and not value.startswith("//"):
+        return value
+    return None
+
+
+def verification_code_hash(user_id: int, code: str) -> str:
+    key = str(app.secret_key).encode("utf-8")
+    payload = f"{user_id}:{code}".encode("utf-8")
+    return hmac.new(key, payload, hashlib.sha256).hexdigest()
+
+
+def issue_verification_code(db: sqlite3.Connection, user_id: int) -> str:
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    now = utc_now()
+    expires = now + timedelta(minutes=VERIFICATION_TTL_MINUTES)
+    db.execute(
+        """INSERT INTO email_verifications(user_id,code_hash,expires_at,attempts,last_sent_at)
+           VALUES(?,?,?,?,?)
+           ON CONFLICT(user_id) DO UPDATE SET code_hash=excluded.code_hash,
+           expires_at=excluded.expires_at,attempts=0,last_sent_at=excluded.last_sent_at""",
+        (user_id, verification_code_hash(user_id, code), expires.isoformat(), 0, now.isoformat()),
+    )
+    return code
+
+
+def send_verification_email(name: str, email: str, code: str) -> bool:
+    default_mode = "smtp" if os.getenv("RAILWAY_ENVIRONMENT") else "console"
+    mode = os.getenv("MAIL_MODE", default_mode).strip().lower()
+    if mode == "console":
+        app.logger.warning("TITAN DEV — código de confirmação para %s: %s", email, code)
+        return True
+    if mode != "smtp":
+        app.logger.error("MAIL_MODE inválido. Use 'smtp' ou 'console'.")
+        return False
+
+    host = os.getenv("SMTP_HOST", "").strip()
+    username = os.getenv("SMTP_USERNAME", "").strip()
+    password = os.getenv("SMTP_PASSWORD", "")
+    from_email = os.getenv("SMTP_FROM_EMAIL", username).strip()
+    from_name = os.getenv("SMTP_FROM_NAME", "Projeto TITAN").strip()
+    use_ssl = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
+    use_tls = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    default_port = 465 if use_ssl else 587
+    try:
+        port = int(os.getenv("SMTP_PORT", str(default_port)))
+    except ValueError:
+        app.logger.error("SMTP_PORT precisa ser um número.")
+        return False
+    if not host or not from_email:
+        app.logger.error("Configuração SMTP incompleta: informe SMTP_HOST e SMTP_FROM_EMAIL.")
+        return False
+
+    message = EmailMessage()
+    message["Subject"] = f"{code} é seu código de confirmação TITAN"
+    message["From"] = f"{from_name} <{from_email}>"
+    message["To"] = email
+    message.set_content(
+        f"Olá, {name}!\n\nSeu código de confirmação do Projeto TITAN é: {code}\n\n"
+        f"Ele expira em {VERIFICATION_TTL_MINUTES} minutos. Se você não criou esta conta, ignore este e-mail."
+    )
+    safe_name = html_escape(name)
+    message.add_alternative(
+        f"""<!doctype html><html><body style="margin:0;background:#0b0f15;color:#eef2f6;font-family:Arial,sans-serif">
+        <div style="max-width:520px;margin:0 auto;padding:36px 22px">
+          <div style="color:#f39a2f;font-size:28px;font-weight:900;letter-spacing:2px">TITAN</div>
+          <div style="margin-top:22px;padding:28px;background:#151d27;border:1px solid #303b47;border-radius:16px">
+            <h1 style="margin:0 0 12px;font-size:23px">Confirme seu e-mail</h1>
+            <p style="color:#a8b3bf;line-height:1.6">Olá, {safe_name}! Use o código abaixo para liberar sua conta:</p>
+            <div style="margin:22px 0;padding:16px;text-align:center;background:#0c1219;border-radius:12px;color:#ffad4c;font-size:34px;font-weight:900;letter-spacing:9px">{code}</div>
+            <p style="color:#a8b3bf;font-size:13px">O código expira em {VERIFICATION_TTL_MINUTES} minutos. Se você não criou esta conta, ignore esta mensagem.</p>
+          </div>
+        </div></body></html>""",
+        subtype="html",
+    )
+
+    context = ssl.create_default_context()
+    try:
+        if use_ssl:
+            with smtplib.SMTP_SSL(host, port, timeout=15, context=context) as smtp:
+                if username:
+                    smtp.login(username, password)
+                smtp.send_message(message)
+        else:
+            with smtplib.SMTP(host, port, timeout=15) as smtp:
+                smtp.ehlo()
+                if use_tls:
+                    smtp.starttls(context=context)
+                    smtp.ehlo()
+                if username:
+                    smtp.login(username, password)
+                smtp.send_message(message)
+        return True
+    except (OSError, smtplib.SMTPException):
+        app.logger.exception("Não foi possível enviar o código de confirmação por SMTP.")
+        return False
 
 
 def db_conn() -> sqlite3.Connection:
@@ -59,7 +234,17 @@ def init_db() -> None:
             name TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE COLLATE NOCASE,
             password_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            email_verified INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS email_verifications(
+            user_id INTEGER PRIMARY KEY,
+            code_hash TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            last_sent_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS settings(
@@ -267,6 +452,11 @@ def init_db() -> None:
             if column not in existing:
                 db.execute(f"ALTER TABLE settings ADD COLUMN {column} {definition}")
 
+        # Contas criadas antes da verificação por e-mail permanecem válidas.
+        user_columns = {row["name"] for row in db.execute("PRAGMA table_info(users)").fetchall()}
+        if "email_verified" not in user_columns:
+            db.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1")
+
 
 init_db()
 
@@ -302,7 +492,14 @@ def load_user_and_check_csrf():
     user_id = session.get("user_id")
     if user_id:
         with db_conn() as db:
-            g.user = db.execute("SELECT id,name,email FROM users WHERE id=?", (user_id,)).fetchone()
+            account = db.execute("SELECT id,name,email,email_verified FROM users WHERE id=?", (user_id,)).fetchone()
+        if account and account["email_verified"]:
+            g.user = account
+        else:
+            session.pop("user_id", None)
+            if account:
+                session["pending_user_id"] = account["id"]
+            g.user = None
     else:
         g.user = None
 
@@ -619,23 +816,36 @@ def register():
         name = request.form["name"].strip()
         email = request.form["email"].strip().lower()
         password = request.form["password"]
-        if len(name) < 2 or "@" not in email or len(password) < 6:
-            flash("Preencha nome, e-mail válido e senha com pelo menos 6 caracteres.")
-            return render_template("register.html")
+        password_confirm = request.form.get("password_confirm", "")
+        if len(name) < 2 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+            flash("Preencha um nome e um e-mail válido.")
+            return render_template("register.html", form_name=name, form_email=email)
+        errors = password_errors(password, name, email)
+        if errors:
+            flash("A senha ainda precisa de: " + ", ".join(errors) + ".")
+            return render_template("register.html", form_name=name, form_email=email)
+        if password != password_confirm:
+            flash("A confirmação da senha não corresponde.")
+            return render_template("register.html", form_name=name, form_email=email)
         try:
             with db_conn() as db:
-                cur = db.execute("INSERT INTO users(name,email,password_hash,created_at) VALUES(?,?,?,?)",
+                cur = db.execute("INSERT INTO users(name,email,password_hash,created_at,email_verified) VALUES(?,?,?,?,0)",
                                  (name, email, generate_password_hash(password), datetime.now().isoformat(timespec="seconds")))
-                seed_user(db, cur.lastrowid)
+                user_id = cur.lastrowid
+                seed_user(db, user_id)
+                code = issue_verification_code(db, user_id)
                 db.commit()
         except sqlite3.IntegrityError:
             flash("Este e-mail já está cadastrado.")
-            return render_template("register.html")
+            return render_template("register.html", form_name=name, form_email=email)
         session.clear()
-        session["user_id"] = cur.lastrowid
+        session["pending_user_id"] = user_id
         csrf_token()
-        flash("Conta criada. Responda à avaliação inicial para o TITAN calcular suas metas.")
-        return redirect(url_for("onboarding"))
+        if send_verification_email(name, email, code):
+            flash("Enviamos um código de 6 dígitos para confirmar seu e-mail.")
+        else:
+            flash("Sua conta foi criada, mas o envio falhou. Verifique a configuração de e-mail e use Reenviar código.")
+        return redirect(url_for("verify_email"))
     return render_template("register.html")
 
 
@@ -650,11 +860,120 @@ def login():
         if not user or not check_password_hash(user["password_hash"], request.form["password"]):
             flash("E-mail ou senha incorretos.")
             return render_template("login.html")
+        if not user["email_verified"]:
+            should_send = False
+            with db_conn() as db:
+                verification = db.execute(
+                    "SELECT * FROM email_verifications WHERE user_id=?", (user["id"],)
+                ).fetchone()
+                if not verification or parse_utc(verification["expires_at"]) <= utc_now():
+                    code = issue_verification_code(db, user["id"])
+                    db.commit()
+                    should_send = True
+            session.clear()
+            session["pending_user_id"] = user["id"]
+            csrf_token()
+            if should_send:
+                if send_verification_email(user["name"], user["email"], code):
+                    flash("Enviamos um novo código para confirmar seu e-mail.")
+                else:
+                    flash("Não foi possível enviar o código agora. Tente reenviar em instantes.")
+            else:
+                flash("Sua conta ainda precisa da confirmação por e-mail.")
+            return redirect(url_for("verify_email"))
         session.clear()
         session["user_id"] = user["id"]
         csrf_token()
-        return redirect(request.args.get("next") or url_for("dashboard"))
+        return redirect(safe_next_url(request.args.get("next")) or url_for("dashboard"))
     return render_template("login.html")
+
+
+@app.route("/verificar-email", methods=["GET", "POST"])
+def verify_email():
+    if g.user:
+        return redirect(url_for("dashboard"))
+    user_id = session.get("pending_user_id")
+    if not user_id:
+        flash("Entre na sua conta para continuar a confirmação.")
+        return redirect(url_for("login"))
+
+    with db_conn() as db:
+        user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        verification = db.execute(
+            "SELECT * FROM email_verifications WHERE user_id=?", (user_id,)
+        ).fetchone()
+    if not user:
+        session.clear()
+        return redirect(url_for("register"))
+    if user["email_verified"]:
+        session.clear()
+        session["user_id"] = user["id"]
+        csrf_token()
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        code = request.form.get("code", "").strip()
+        if not verification:
+            flash("Não há código ativo. Solicite um novo código.")
+        elif parse_utc(verification["expires_at"]) <= utc_now():
+            flash("Esse código expirou. Solicite um novo código.")
+        elif verification["attempts"] >= VERIFICATION_MAX_ATTEMPTS:
+            flash("Limite de tentativas atingido. Solicite um novo código.")
+        elif not re.fullmatch(r"\d{6}", code):
+            flash("Digite os 6 números do código.")
+        elif secrets.compare_digest(verification["code_hash"], verification_code_hash(user_id, code)):
+            with db_conn() as db:
+                db.execute("UPDATE users SET email_verified=1 WHERE id=?", (user_id,))
+                db.execute("DELETE FROM email_verifications WHERE user_id=?", (user_id,))
+                db.commit()
+            session.clear()
+            session["user_id"] = user_id
+            csrf_token()
+            flash("E-mail confirmado com segurança. Agora vamos calcular seu plano inicial.")
+            return redirect(url_for("onboarding"))
+        else:
+            attempts = verification["attempts"] + 1
+            with db_conn() as db:
+                db.execute("UPDATE email_verifications SET attempts=? WHERE user_id=?", (attempts, user_id))
+                db.commit()
+            remaining = max(0, VERIFICATION_MAX_ATTEMPTS - attempts)
+            flash(f"Código incorreto. Restam {remaining} tentativa(s).")
+
+    return render_template(
+        "verify_email.html",
+        masked_email=mask_email(user["email"]),
+        ttl_minutes=VERIFICATION_TTL_MINUTES,
+    )
+
+
+@app.post("/verificar-email/reenviar")
+def resend_verification():
+    if g.user:
+        return redirect(url_for("dashboard"))
+    user_id = session.get("pending_user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+    with db_conn() as db:
+        user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        verification = db.execute(
+            "SELECT * FROM email_verifications WHERE user_id=?", (user_id,)
+        ).fetchone()
+        if not user:
+            session.clear()
+            return redirect(url_for("register"))
+        if verification:
+            elapsed = (utc_now() - parse_utc(verification["last_sent_at"])).total_seconds()
+            if elapsed < VERIFICATION_RESEND_SECONDS:
+                wait = max(1, int(VERIFICATION_RESEND_SECONDS - elapsed))
+                flash(f"Aguarde {wait} segundo(s) antes de pedir outro código.")
+                return redirect(url_for("verify_email"))
+        code = issue_verification_code(db, user_id)
+        db.commit()
+    if send_verification_email(user["name"], user["email"], code):
+        flash("Um novo código foi enviado. O código anterior não é mais válido.")
+    else:
+        flash("Não foi possível enviar o código. Confira a configuração SMTP e tente novamente.")
+    return redirect(url_for("verify_email"))
 
 
 @app.get("/logout")

@@ -1,6 +1,15 @@
-# Projeto TITAN V3.3 — Navegação guiada + Base V2 preservada
+# Projeto TITAN V3.4 — E-mail seguro + Navegação guiada
 
 Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. Ela mantém kcal e macros por alimento e por refeição e acrescenta login, fotos, previsões, análise automática, comparador de mercados, calendário, exercícios com mídia e deploy no Railway.
+
+## Segurança da conta
+- toda conta nova precisa confirmar o endereço com um código de 6 dígitos;
+- o código expira em 10 minutos e o anterior é invalidado ao reenviar;
+- há limite de 5 tentativas por código e intervalo mínimo para reenvio;
+- somente o hash do código é armazenado no banco;
+- a senha precisa ter no mínimo 10 caracteres, maiúscula, minúscula, número e símbolo;
+- senhas contendo nome, início do e-mail ou sequências óbvias são recusadas;
+- contas que já existiam antes desta atualização continuam confirmadas para não bloquear usuários atuais.
 
 ## Nova experiência de navegação
 - menu lateral permanente no computador, dividido em **Meu dia**, **Minha rotina**, **Planejar** e **Configurar**;
@@ -20,7 +29,17 @@ Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. 
    - `SECRET_KEY`: uma chave longa e aleatória.
    - `DB_PATH=/data/titan.db`
    - `UPLOAD_PATH=/data/uploads`
+   - `MAIL_MODE=smtp`
+   - `SMTP_HOST`: servidor SMTP do seu provedor de e-mail.
+   - `SMTP_PORT`: normalmente `587` com TLS ou `465` com SSL.
+   - `SMTP_USERNAME`: usuário da conta de envio.
+   - `SMTP_PASSWORD`: senha SMTP ou chave de aplicativo.
+   - `SMTP_FROM_EMAIL`: endereço que aparecerá como remetente.
+   - `SMTP_FROM_NAME=Projeto TITAN`
+   - `SMTP_USE_TLS=true` e `SMTP_USE_SSL=false` para porta 587.
 5. Gere um domínio público.
+
+Nunca envie o arquivo `.env` ao GitHub. No Railway, cadastre esses valores na área de variáveis do serviço. Se o seu provedor usar a porta 465, configure `SMTP_USE_SSL=true` e `SMTP_USE_TLS=false`.
 
 O sistema usa um worker do Gunicorn para reduzir conflitos de escrita no SQLite. Para grande quantidade de usuários, a evolução recomendada é PostgreSQL.
 
@@ -40,6 +59,8 @@ O sistema usa um worker do Gunicorn para reduzir conflitos de escrita no SQLite.
 
 ## Windows
 Execute `executar.bat`. Na primeira abertura, o ambiente virtual e as dependências serão instalados.
+
+Sem configuração SMTP, a execução local usa o modo de desenvolvimento e mostra o código somente no terminal. Para testar o envio real no Windows, copie `.env.example` para `.env`, preencha os dados SMTP e mantenha `.env` fora do Git.
 
 
 ## Avaliação inicial automática
