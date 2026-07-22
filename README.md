@@ -1,4 +1,4 @@
-# Projeto TITAN V3.5 — Recuperação de senha + E-mail seguro
+# Projeto TITAN V3.6 — Códigos pela API gratuita da Brevo
 
 Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. Ela mantém kcal e macros por alimento e por refeição e acrescenta login, fotos, previsões, análise automática, comparador de mercados, calendário, exercícios com mídia e deploy no Railway.
 
@@ -10,7 +10,8 @@ Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. 
 - a senha precisa ter no mínimo 10 caracteres, maiúscula, minúscula, número e símbolo;
 - senhas contendo nome, início do e-mail ou sequências óbvias são recusadas;
 - contas que já existiam antes desta atualização continuam confirmadas para não bloquear usuários atuais.
-- falhas de configuração ou conexão SMTP são tratadas na tela e não derrubam mais o cadastro com erro 500.
+- falhas de configuração ou conexão com a Brevo são tratadas na tela e não derrubam mais o cadastro com erro 500;
+- o envio usa HTTPS e funciona no Railway gratuito sem depender de portas SMTP.
 
 ## Recuperação de senha
 - o link **Esqueci minha senha** fica disponível na tela de entrada;
@@ -38,17 +39,13 @@ Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. 
    - `SECRET_KEY`: uma chave longa e aleatória.
    - `DB_PATH=/data/titan.db`
    - `UPLOAD_PATH=/data/uploads`
-   - `MAIL_MODE=smtp`
-   - `SMTP_HOST`: servidor SMTP do seu provedor de e-mail.
-   - `SMTP_PORT`: normalmente `587` com TLS ou `465` com SSL.
-   - `SMTP_USERNAME`: usuário da conta de envio.
-   - `SMTP_PASSWORD`: senha SMTP ou chave de aplicativo.
-   - `SMTP_FROM_EMAIL`: endereço que aparecerá como remetente.
-   - `SMTP_FROM_NAME=Projeto TITAN`
-   - `SMTP_USE_TLS=true` e `SMTP_USE_SSL=false` para porta 587.
+   - `MAIL_MODE=brevo_api`
+   - `BREVO_API_KEY`: a chave completa criada em **SMTP & API > Chaves API e MCP**.
+   - `BREVO_SENDER_EMAIL`: o endereço que aparece como **Verificado** na área de remetentes.
+   - `BREVO_SENDER_NAME=TITAN`
 5. Gere um domínio público.
 
-Nunca envie o arquivo `.env` ao GitHub. No Railway, cadastre esses valores na área de variáveis do serviço. Se o seu provedor usar a porta 465, configure `SMTP_USE_SSL=true` e `SMTP_USE_TLS=false`.
+Nunca envie o arquivo `.env` nem a chave da Brevo ao GitHub ou em conversas. Cadastre os valores diretamente na área **Variables** do serviço no Railway. O endereço de `BREVO_SENDER_EMAIL` precisa ser exatamente o remetente verificado na Brevo.
 
 Se uma conta foi criada durante uma falha de envio de uma versão anterior, não é necessário cadastrá-la novamente: abra **Entrar**, use o mesmo e-mail e a mesma senha e depois selecione **Reenviar código**.
 
@@ -71,7 +68,7 @@ O sistema usa um worker do Gunicorn para reduzir conflitos de escrita no SQLite.
 ## Windows
 Execute `executar.bat`. Na primeira abertura, o ambiente virtual e as dependências serão instalados.
 
-Sem configuração SMTP, a execução local usa o modo de desenvolvimento e mostra o código somente no terminal. Para testar o envio real no Windows, copie `.env.example` para `.env`, preencha os dados SMTP e mantenha `.env` fora do Git.
+Sem configuração de e-mail, a execução local usa o modo de desenvolvimento e mostra o código somente no terminal. Para testar o envio real no Windows, copie `.env.example` para `.env`, preencha os dados da Brevo e mantenha `.env` fora do Git.
 
 
 ## Avaliação inicial automática

@@ -10,6 +10,8 @@ import secrets
 import smtplib
 import ssl
 import sqlite3
+import urllib.error
+import urllib.request
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -169,18 +171,88 @@ def issue_password_reset_code(db: sqlite3.Connection, user_id: int) -> str:
     return code
 
 
-def _send_verification_email(name: str, email: str, code: str, purpose: str = "verify") -> bool:
+def email_contents(name: str, code: str, purpose: str = "verify") -> tuple[str, str, str]:
     is_reset = purpose == "reset"
-    default_mode = "smtp" if os.getenv("RAILWAY_ENVIRONMENT") else "console"
-    mode = os.getenv("MAIL_MODE", default_mode).strip().lower()
-    if mode == "console":
-        label = "recuperação de senha" if is_reset else "confirmação de e-mail"
-        app.logger.warning("TITAN DEV — código de %s para %s: %s", label, email, code)
-        return True
-    if mode != "smtp":
-        app.logger.error("MAIL_MODE inválido. Use 'smtp' ou 'console'.")
+    subject = (
+        f"{code} é seu código para redefinir a senha TITAN"
+        if is_reset else f"{code} é seu código de confirmação TITAN"
+    )
+    if is_reset:
+        text_content = (
+            f"Olá, {name}!\n\nSeu código para redefinir a senha do Projeto TITAN é: {code}\n\n"
+            f"Ele expira em {VERIFICATION_TTL_MINUTES} minutos. Se você não solicitou a troca, ignore este e-mail."
+        )
+        email_title = "Redefina sua senha"
+        email_intro = "Use o código abaixo para criar uma nova senha com segurança:"
+        email_warning = "Se você não solicitou a troca de senha, ignore esta mensagem e sua senha continuará igual."
+    else:
+        text_content = (
+            f"Olá, {name}!\n\nSeu código de confirmação do Projeto TITAN é: {code}\n\n"
+            f"Ele expira em {VERIFICATION_TTL_MINUTES} minutos. Se você não criou esta conta, ignore este e-mail."
+        )
+        email_title = "Confirme seu e-mail"
+        email_intro = "Use o código abaixo para liberar sua conta:"
+        email_warning = "Se você não criou esta conta, ignore esta mensagem."
+    safe_name = html_escape(name)
+    html_content = f"""<!doctype html><html><body style="margin:0;background:#0b0f15;color:#eef2f6;font-family:Arial,sans-serif">
+        <div style="max-width:520px;margin:0 auto;padding:36px 22px">
+          <div style="color:#f39a2f;font-size:28px;font-weight:900;letter-spacing:2px">TITAN</div>
+          <div style="margin-top:22px;padding:28px;background:#151d27;border:1px solid #303b47;border-radius:16px">
+            <h1 style="margin:0 0 12px;font-size:23px">{email_title}</h1>
+            <p style="color:#a8b3bf;line-height:1.6">Olá, {safe_name}! {email_intro}</p>
+            <div style="margin:22px 0;padding:16px;text-align:center;background:#0c1219;border-radius:12px;color:#ffad4c;font-size:34px;font-weight:900;letter-spacing:9px">{code}</div>
+            <p style="color:#a8b3bf;font-size:13px">O código expira em {VERIFICATION_TTL_MINUTES} minutos. {email_warning}</p>
+          </div>
+        </div></body></html>"""
+    return subject, text_content, html_content
+
+
+def send_brevo_api(
+    name: str, email: str, subject: str, text_content: str, html_content: str
+) -> bool:
+    api_key = os.getenv("BREVO_API_KEY", "").strip()
+    sender_email = os.getenv("BREVO_SENDER_EMAIL", "").strip()
+    sender_name = os.getenv("BREVO_SENDER_NAME", "Projeto TITAN").strip()
+    if not api_key or not sender_email:
+        app.logger.error(
+            "Configuração Brevo incompleta: informe BREVO_API_KEY e BREVO_SENDER_EMAIL."
+        )
         return False
 
+    payload = json.dumps(
+        {
+            "sender": {"name": sender_name, "email": sender_email},
+            "to": [{"name": name, "email": email}],
+            "subject": subject,
+            "textContent": text_content,
+            "htmlContent": html_content,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    api_request = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data=payload,
+        method="POST",
+        headers={
+            "accept": "application/json",
+            "api-key": api_key,
+            "content-type": "application/json",
+            "user-agent": "Projeto-TITAN/3.6",
+        },
+    )
+    try:
+        with urllib.request.urlopen(api_request, timeout=15) as response:
+            return 200 <= response.status < 300
+    except urllib.error.HTTPError as error:
+        app.logger.error("A Brevo recusou o envio do e-mail (HTTP %s).", error.code)
+    except (urllib.error.URLError, OSError):
+        app.logger.exception("Não foi possível conectar à API da Brevo.")
+    return False
+
+
+def send_smtp(
+    email: str, subject: str, text_content: str, html_content: str
+) -> bool:
     host = os.getenv("SMTP_HOST", "").strip()
     username = os.getenv("SMTP_USERNAME", "").strip()
     password = os.getenv("SMTP_PASSWORD", "")
@@ -199,42 +271,11 @@ def _send_verification_email(name: str, email: str, code: str, purpose: str = "v
         return False
 
     message = EmailMessage()
-    message["Subject"] = (
-        f"{code} é seu código para redefinir a senha TITAN"
-        if is_reset else f"{code} é seu código de confirmação TITAN"
-    )
+    message["Subject"] = subject
     message["From"] = f"{from_name} <{from_email}>"
     message["To"] = email
-    if is_reset:
-        message.set_content(
-            f"Olá, {name}!\n\nSeu código para redefinir a senha do Projeto TITAN é: {code}\n\n"
-            f"Ele expira em {VERIFICATION_TTL_MINUTES} minutos. Se você não solicitou a troca, ignore este e-mail."
-        )
-        email_title = "Redefina sua senha"
-        email_intro = "Use o código abaixo para criar uma nova senha com segurança:"
-        email_warning = "Se você não solicitou a troca de senha, ignore esta mensagem e sua senha continuará igual."
-    else:
-        message.set_content(
-            f"Olá, {name}!\n\nSeu código de confirmação do Projeto TITAN é: {code}\n\n"
-            f"Ele expira em {VERIFICATION_TTL_MINUTES} minutos. Se você não criou esta conta, ignore este e-mail."
-        )
-        email_title = "Confirme seu e-mail"
-        email_intro = "Use o código abaixo para liberar sua conta:"
-        email_warning = "Se você não criou esta conta, ignore esta mensagem."
-    safe_name = html_escape(name)
-    message.add_alternative(
-        f"""<!doctype html><html><body style="margin:0;background:#0b0f15;color:#eef2f6;font-family:Arial,sans-serif">
-        <div style="max-width:520px;margin:0 auto;padding:36px 22px">
-          <div style="color:#f39a2f;font-size:28px;font-weight:900;letter-spacing:2px">TITAN</div>
-          <div style="margin-top:22px;padding:28px;background:#151d27;border:1px solid #303b47;border-radius:16px">
-            <h1 style="margin:0 0 12px;font-size:23px">{email_title}</h1>
-            <p style="color:#a8b3bf;line-height:1.6">Olá, {safe_name}! {email_intro}</p>
-            <div style="margin:22px 0;padding:16px;text-align:center;background:#0c1219;border-radius:12px;color:#ffad4c;font-size:34px;font-weight:900;letter-spacing:9px">{code}</div>
-            <p style="color:#a8b3bf;font-size:13px">O código expira em {VERIFICATION_TTL_MINUTES} minutos. {email_warning}</p>
-          </div>
-        </div></body></html>""",
-        subtype="html",
-    )
+    message.set_content(text_content)
+    message.add_alternative(html_content, subtype="html")
 
     context = ssl.create_default_context()
     try:
@@ -254,8 +295,33 @@ def _send_verification_email(name: str, email: str, code: str, purpose: str = "v
                 smtp.send_message(message)
         return True
     except (OSError, smtplib.SMTPException):
-        app.logger.exception("Não foi possível enviar o código de confirmação por SMTP.")
+        app.logger.exception("Não foi possível enviar o e-mail por SMTP.")
         return False
+
+
+def _send_verification_email(name: str, email: str, code: str, purpose: str = "verify") -> bool:
+    is_reset = purpose == "reset"
+    configured_mode = os.getenv("MAIL_MODE", "").strip().lower()
+    if configured_mode:
+        mode = configured_mode
+    elif os.getenv("BREVO_API_KEY"):
+        mode = "brevo_api"
+    else:
+        mode = "smtp" if os.getenv("RAILWAY_ENVIRONMENT") else "console"
+
+    if mode == "console":
+        label = "recuperação de senha" if is_reset else "confirmação de e-mail"
+        app.logger.warning("TITAN DEV — código de %s para %s: %s", label, email, code)
+        return True
+
+    subject, text_content, html_content = email_contents(name, code, purpose)
+    if mode in {"brevo", "brevo_api", "api"}:
+        return send_brevo_api(name, email, subject, text_content, html_content)
+    if mode == "smtp":
+        return send_smtp(email, subject, text_content, html_content)
+
+    app.logger.error("MAIL_MODE inválido. Use 'brevo_api', 'smtp' ou 'console'.")
+    return False
 
 
 def send_verification_email(name: str, email: str, code: str) -> bool:
@@ -268,7 +334,7 @@ def send_verification_email(name: str, email: str, code: str) -> bool:
 
 
 def send_password_reset_email(name: str, email: str, code: str) -> bool:
-    """O reset de senha também nunca pode derrubar a aplicação por falha SMTP."""
+    """O reset de senha também nunca pode derrubar a aplicação por falha do provedor."""
     try:
         return _send_verification_email(name, email, code, purpose="reset")
     except Exception:
@@ -1172,7 +1238,7 @@ def resend_verification():
     if send_verification_email(user["name"], user["email"], code):
         flash("Um novo código foi enviado. O código anterior não é mais válido.")
     else:
-        flash("Não foi possível enviar o código. Confira a configuração SMTP e tente novamente.")
+        flash("Não foi possível enviar o código. Confira a configuração de e-mail e tente novamente.")
     return redirect(url_for("verify_email"))
 
 
