@@ -2,7 +2,7 @@
 {% block title %}Confirmar e-mail • TITAN{% endblock %}
 {% block content %}
 <section class="auth-card verification-card">
-  <div class="auth-logo">TITAN<span>CONFIRMAÇÃO DE SEGURANÇA</span></div>
+  <div class="auth-logo"><img src="{{ url_for('static',filename='brand/titan-logo-horizontal-dark.svg') }}" alt="TITAN"><span>CONFIRMAÇÃO DE SEGURANÇA</span></div>
   <div class="verification-icon" aria-hidden="true">✉</div>
   <h1>Confira seu e-mail</h1>
   <p class="muted">Enviamos um código de 6 dígitos para <strong>{{ masked_email }}</strong>. Digite-o abaixo para liberar sua conta.</p>

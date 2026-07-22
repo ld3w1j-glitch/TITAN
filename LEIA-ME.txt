@@ -1,0 +1,31 @@
+TITAN V3.9 — IDENTIDADE VISUAL OFICIAL
+=======================================
+
+Este pacote contém somente os arquivos necessários para aplicar a nova
+identidade visual ao TITAN.
+
+COMO ATUALIZAR
+--------------
+1. Abra a pasta atual do seu projeto.
+2. Copie as pastas "templates" e "static" deste pacote para dentro do projeto.
+3. Confirme a substituição dos arquivos que já existem.
+4. Envie a atualização para o Railway da mesma forma que nas versões anteriores.
+
+IMPORTANTE
+----------
+- O arquivo app.py não foi alterado e não está incluído.
+- Esta atualização não altera o banco de dados.
+- Usuários, senhas, refeições, treinos, fotos e demais registros são preservados.
+- Não apague o volume persistente configurado no Railway.
+
+O QUE FOI APLICADO
+------------------
+- Logo oficial nas telas de entrada, cadastro e recuperação de senha.
+- Logo oficial na avaliação inicial e no resultado do plano.
+- Nova marca no menu lateral.
+- Símbolo TITAN no cabeçalho de celular.
+- Favicon para navegadores.
+- Ícone para atalhos e instalação em celular.
+- Manifesto visual com as cores oficiais do TITAN.
+- Acabamento visual da tela de autenticação.
+

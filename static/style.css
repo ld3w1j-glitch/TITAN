@@ -36,3 +36,24 @@ button,a,input,select,textarea{outline-offset:3px}button:focus-visible,a:focus-v
 .flash{display:flex;align-items:center;justify-content:space-between;gap:14px}.flash>span{min-width:0}.flash>form{flex:0 0 auto}.flash>form button{padding:7px 12px;border:1px solid #d79238;background:#4a3215;color:#ffe2b9;font-size:11px}.flash.undo{background:#16241d;border-color:#356749;color:#b9e2c9}.flash.undo>form button{border-color:#4f8c68;background:#203d2c;color:#d4f3df}.header-undo{margin:0}.header-undo button{display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid #3c4b59;background:#17212b;color:#d2dae2;font-size:11px}.header-undo button>span{font-size:17px}.header-undo button:hover{border-color:#8b622c;color:var(--accent2)}.quick-split-actions{grid-column:1/-1!important;display:grid!important;grid-template-columns:1fr 1fr;gap:6px}.quick-split-actions form button{width:100%;padding:9px;font-size:11px}
 @media(max-width:700px){.flash{align-items:flex-start}.header-undo button b{display:none}.header-undo button{padding:8px 10px}.quick-split-actions{grid-template-columns:1fr 1fr}}
 .quick-status{text-decoration:none}
+
+/* TITAN V3.9 — identidade visual oficial */
+.brand{display:flex;flex-direction:column;align-items:flex-start;color:var(--accent);text-decoration:none}
+.brand img{display:block;width:185px;max-width:100%;height:auto}
+.brand span,.auth-logo span{display:block;color:var(--muted);font-size:8px;font-weight:900;letter-spacing:3px}
+.brand span{align-self:stretch;padding-left:61px;margin-top:-4px}
+.sidebar-head .brand{width:185px;font-size:0}
+.auth-body{overflow-x:hidden}
+.auth-main{position:relative;isolation:isolate;padding:32px 0;overflow:hidden}
+.auth-main:before{content:"";position:fixed;right:-8vw;bottom:-22vh;z-index:0;width:min(720px,72vw);aspect-ratio:1;background:url('brand/titan-symbol-dark.svg') center/contain no-repeat;opacity:.028;pointer-events:none}
+.auth-main>*{position:relative;z-index:1}
+.auth-card{position:relative;overflow:hidden}
+.auth-card:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent)}
+.auth-logo{display:flex;flex-direction:column;align-items:flex-start;width:max-content;max-width:100%;margin-bottom:25px;font-size:0}
+.auth-logo img{display:block;width:245px;max-width:100%;height:auto}
+.auth-logo span{align-self:stretch;padding-left:80px;margin-top:-5px}
+.verification-card .auth-logo,.result-hero .auth-logo{align-items:center;margin-left:auto;margin-right:auto}
+.verification-card .auth-logo span,.result-hero .auth-logo span{padding-left:0;text-align:center}
+.workspace-symbol{display:none;width:30px;height:30px;object-fit:contain}
+@media(max-width:900px){.workspace-symbol{display:block}}
+@media(max-width:520px){.auth-main{padding:18px 0}.auth-logo img{width:220px}.auth-logo span{padding-left:71px;letter-spacing:2.2px}.verification-card .auth-logo span,.result-hero .auth-logo span{padding-left:0}.sidebar-head .brand{width:172px}.brand img{width:172px}.brand span{padding-left:56px}}

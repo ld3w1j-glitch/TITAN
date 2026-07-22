@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}Avaliação inicial • TITAN{% endblock %}{% block content %}
 <section class="onboarding-shell">
-  <div class="onboarding-brand"><div class="auth-logo">TITAN<span>AVALIAÇÃO INICIAL</span></div><small>PASSO <b id="step-number">1</b> DE 5</small></div>
+  <div class="onboarding-brand"><div class="auth-logo"><img src="{{ url_for('static',filename='brand/titan-logo-horizontal-dark.svg') }}" alt="TITAN"><span>AVALIAÇÃO INICIAL</span></div><small>PASSO <b id="step-number">1</b> DE 5</small></div>
   <div class="quiz-progress"><i id="quiz-progress-bar"></i></div>
   <ol class="quiz-map" aria-label="Etapas da avaliação">
     <li class="current" data-quiz-marker><span>1</span>Seu corpo</li>

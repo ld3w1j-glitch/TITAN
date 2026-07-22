@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 512" role="img" aria-labelledby="title desc">
+  <title id="title">TITAN</title>
+  <desc id="desc">Logo horizontal TITAN para fundos escuros.</desc>
+  <defs>
+    <linearGradient id="titanOrange" x1="96" y1="390" x2="410" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E78A20"/>
+      <stop offset="1" stop-color="#FFB14F"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(40 54) scale(.79)">
+    <path fill="url(#titanOrange)" d="M256 44 420 166q14 11 14 29v111l-76 90V278l-102-78-102 78v118l-76-90V195q0-18 14-29L256 44Z"/>
+    <path fill="#F5F7FA" d="m154 278 82 61v129l-42-37-40-40V278Zm204 0-82 61v129l42-37 40-40V278Z"/>
+  </g>
+  <g fill="#F5F7FA">
+    <path d="M480 160h150v34h-56v158h-38V194h-56v-34Z"/>
+    <path d="M671 160h38v192h-38V160Z"/>
+    <path d="M750 160h150v34h-56v158h-38V194h-56v-34Z"/>
+    <path fill-rule="evenodd" d="m984 154 94 198h-44l-19-43h-83l-19 43h-44l94-198h21Zm-27 120h33l-16-40-17 40Z"/>
+    <path d="M1118 160h38l112 136V160h39v192h-38l-112-136v136h-39V160Z"/>
+  </g>
+</svg>

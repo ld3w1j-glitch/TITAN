@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Ícone do aplicativo TITAN</title>
+  <defs>
+    <linearGradient id="titanOrange" x1="107" y1="387" x2="405" y2="125" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E78A20"/>
+      <stop offset="1" stop-color="#FFB14F"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="104" fill="#090C10"/>
+  <g transform="translate(61 61) scale(.762)">
+    <path fill="url(#titanOrange)" d="M256 44 420 166q14 11 14 29v111l-76 90V278l-102-78-102 78v118l-76-90V195q0-18 14-29L256 44Z"/>
+    <path fill="#F5F7FA" d="m154 278 82 61v129l-42-37-40-40V278Zm204 0-82 61v129l42-37 40-40V278Z"/>
+  </g>
+</svg>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Símbolo TITAN</title>
+  <desc id="desc">Capacete geométrico de titã nas cores laranja e branco, para uso em fundos escuros.</desc>
+  <defs>
+    <linearGradient id="titanOrange" x1="78" y1="384" x2="434" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E78A20"/>
+      <stop offset="1" stop-color="#FFB14F"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#titanOrange)" d="M256 44 420 166q14 11 14 29v111l-76 90V278l-102-78-102 78v118l-76-90V195q0-18 14-29L256 44Z"/>
+  <path fill="#F5F7FA" d="m154 278 82 61v129l-42-37-40-40V278Zm204 0-82 61v129l42-37 40-40V278Z"/>
+</svg>

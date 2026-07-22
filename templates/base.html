@@ -3,8 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b0e12">
+<meta name="theme-color" content="#090c10">
+<meta name="description" content="TITAN — acompanhamento pessoal de alimentação, treinos e evolução física.">
+<meta name="application-name" content="TITAN">
+<meta name="apple-mobile-web-app-title" content="TITAN">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>{% block title %}Projeto TITAN{% endblock %}</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static',filename='brand/titan-app-icon.svg') }}">
+<link rel="icon" href="{{ url_for('static',filename='brand/favicon.ico') }}" sizes="any">
+<link rel="apple-touch-icon" href="{{ url_for('static',filename='brand/apple-touch-icon-180.png') }}">
+<link rel="manifest" href="{{ url_for('static',filename='site.webmanifest') }}">
 <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
 </head>
 <body class="{% if g.user and not hide_nav %}app-body{% else %}auth-body{% endif %}">
@@ -36,7 +45,7 @@
   <button class="nav-backdrop" type="button" aria-label="Fechar menu" data-nav-close></button>
   <aside class="app-sidebar" id="primary-navigation" aria-label="Navegação principal">
     <div class="sidebar-head">
-      <a class="brand" href="{{ url_for('dashboard') }}" aria-label="TITAN — ir para o painel">TITAN <span>EVOLUÇÃO FÍSICA</span></a>
+      <a class="brand" href="{{ url_for('dashboard') }}" aria-label="TITAN — ir para o painel"><img src="{{ url_for('static',filename='brand/titan-logo-horizontal-dark.svg') }}" alt="TITAN"><span>EVOLUÇÃO FÍSICA</span></a>
       <button class="sidebar-close" type="button" aria-label="Fechar menu" data-nav-close><svg><use href="#i-close"/></svg></button>
     </div>
 
@@ -90,6 +99,7 @@
   <div class="app-stage">
     <header class="workspace-bar">
       <button class="nav-trigger" type="button" aria-label="Abrir menu" aria-controls="primary-navigation" aria-expanded="false" data-nav-open><svg><use href="#i-menu"/></svg></button>
+      <img class="workspace-symbol" src="{{ url_for('static',filename='brand/titan-symbol-dark.svg') }}" alt="" aria-hidden="true">
       <div class="current-location">
         <small>
           {% if endpoint == 'dashboard' %}ACOMPANHAMENTO
