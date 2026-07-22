@@ -67,7 +67,7 @@ def init_db() -> None:
             age INTEGER DEFAULT 27,
             height REAL DEFAULT 1.80,
             start_weight REAL DEFAULT 65,
-            goal_weight REAL DEFAULT 75,
+            goal_weight REAL DEFAULT 70,
             final_goal REAL DEFAULT 85,
             calories INTEGER DEFAULT 2800,
             protein INTEGER DEFAULT 130,
@@ -75,6 +75,18 @@ def init_db() -> None:
             fat INTEGER DEFAULT 85,
             water REAL DEFAULT 2.5,
             weekly_target REAL DEFAULT 0.30,
+            sex TEXT DEFAULT 'male',
+            activity_level TEXT DEFAULT 'sedentary',
+            goal_type TEXT DEFAULT 'gain',
+            training_days INTEGER DEFAULT 0,
+            appetite_level TEXT DEFAULT 'low',
+            meals_per_day INTEGER DEFAULT 4,
+            budget_monthly REAL DEFAULT 0,
+            restrictions TEXT DEFAULT '',
+            bmr REAL DEFAULT 0,
+            tdee REAL DEFAULT 0,
+            onboarding_completed INTEGER DEFAULT 0,
+            calculation_version TEXT DEFAULT 'TITAN-1.0',
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
@@ -235,6 +247,26 @@ def init_db() -> None:
         );
         """)
 
+        # Migração compatível com bancos das versões anteriores.
+        existing = {row["name"] for row in db.execute("PRAGMA table_info(settings)").fetchall()}
+        additions = {
+            "sex": "TEXT DEFAULT 'male'",
+            "activity_level": "TEXT DEFAULT 'sedentary'",
+            "goal_type": "TEXT DEFAULT 'gain'",
+            "training_days": "INTEGER DEFAULT 0",
+            "appetite_level": "TEXT DEFAULT 'low'",
+            "meals_per_day": "INTEGER DEFAULT 4",
+            "budget_monthly": "REAL DEFAULT 0",
+            "restrictions": "TEXT DEFAULT ''",
+            "bmr": "REAL DEFAULT 0",
+            "tdee": "REAL DEFAULT 0",
+            "onboarding_completed": "INTEGER DEFAULT 0",
+            "calculation_version": "TEXT DEFAULT 'TITAN-1.0'",
+        }
+        for column, definition in additions.items():
+            if column not in existing:
+                db.execute(f"ALTER TABLE settings ADD COLUMN {column} {definition}")
+
 
 init_db()
 
@@ -279,6 +311,18 @@ def load_user_and_check_csrf():
         expected = session.get("csrf_token", "")
         if not expected or not secrets.compare_digest(sent, expected):
             abort(400, "Formulário expirado. Atualize a página e tente novamente.")
+
+    # Antes de liberar os módulos, todo usuário realiza a avaliação inicial.
+    if g.user and request.endpoint not in {
+        "onboarding", "onboarding_result", "logout", "health", "static"
+    }:
+        with db_conn() as db:
+            profile = db.execute(
+                "SELECT onboarding_completed FROM settings WHERE user_id=?",
+                (g.user["id"],)
+            ).fetchone()
+        if profile and not profile["onboarding_completed"]:
+            return redirect(url_for("onboarding"))
 
 
 def seed_user(db: sqlite3.Connection, user_id: int) -> None:
@@ -403,6 +447,148 @@ def automatic_insights(db: sqlite3.Connection, user_id: int, settings, weights) 
     return insights[:5]
 
 
+
+def round_step(value: float, step: int = 5) -> int:
+    return int(round(value / step) * step)
+
+
+def first_stage_goal(weight: float, final_goal: float, goal_type: str) -> float:
+    if goal_type == "gain":
+        checkpoint = math.floor(weight / 5) * 5 + 5
+        return min(final_goal, checkpoint)
+    if goal_type == "loss":
+        checkpoint = math.ceil(weight / 5) * 5 - 5
+        return max(final_goal, checkpoint)
+    return weight
+
+
+def calculate_initial_plan(form) -> dict:
+    age = int(form["age"])
+    height_cm = float(form["height_cm"])
+    weight = float(form["weight"])
+    sex = form["sex"]
+    activity_level = form["activity_level"]
+    goal_type = form["goal_type"]
+    training_days = int(form["training_days"])
+    appetite_level = form["appetite_level"]
+    meals_per_day = int(form["meals_per_day"])
+    pace = form["pace"]
+    budget_monthly = float(form.get("budget_monthly") or 0)
+    restrictions = form.get("restrictions", "").strip()
+
+    if not 18 <= age <= 90:
+        raise ValueError("O cálculo automático desta versão é destinado a adultos entre 18 e 90 anos.")
+    if not 130 <= height_cm <= 230 or not 35 <= weight <= 300:
+        raise ValueError("Confira a altura e o peso informados.")
+    if sex not in {"male", "female"}:
+        raise ValueError("Selecione a referência metabólica.")
+    if goal_type not in {"gain", "maintain", "loss"}:
+        raise ValueError("Selecione um objetivo válido.")
+
+    activity_factors = {
+        "sedentary": 1.20,
+        "light": 1.375,
+        "moderate": 1.55,
+        "high": 1.725,
+        "very_high": 1.90,
+    }
+    factor = activity_factors.get(activity_level, 1.20)
+    # Considera também a frequência de treino planejada, sem somar duas vezes:
+    # usa o maior fator entre a rotina declarada e a frequência semanal.
+    training_factors = {0: 1.20, 1: 1.25, 2: 1.30, 3: 1.375, 4: 1.45, 5: 1.55, 6: 1.65, 7: 1.725}
+    factor = max(factor, training_factors.get(training_days, 1.20))
+
+    # Equação de Mifflin-St Jeor para estimar o gasto energético de repouso.
+    sex_constant = 5 if sex == "male" else -161
+    bmr = 10 * weight + 6.25 * height_cm - 5 * age + sex_constant
+    tdee = bmr * factor
+
+    adjustments = {
+        "gain": {"slow": 200, "moderate": 300, "fast": 450},
+        "maintain": {"slow": 0, "moderate": 0, "fast": 0},
+        "loss": {"slow": -300, "moderate": -450, "fast": -650},
+    }
+    weekly_rates = {
+        "gain": {"slow": .20, "moderate": .35, "fast": .50},
+        "maintain": {"slow": 0, "moderate": 0, "fast": 0},
+        "loss": {"slow": .25, "moderate": .50, "fast": .75},
+    }
+    adjustment = adjustments[goal_type].get(pace, adjustments[goal_type]["moderate"])
+    weekly_target = weekly_rates[goal_type].get(pace, weekly_rates[goal_type]["moderate"])
+
+    # Para apetite baixo, evita começar com um salto excessivo de calorias.
+    if goal_type == "gain" and appetite_level == "low":
+        adjustment = min(adjustment, 300)
+        weekly_target = min(weekly_target, .35)
+
+    calories = max(1200, round_step(tdee + adjustment, 50))
+    if goal_type == "gain":
+        protein_factor = 1.8 if training_days >= 3 else 1.6
+        fat_factor = .9
+    elif goal_type == "loss":
+        protein_factor = 2.0 if training_days >= 2 else 1.7
+        fat_factor = .8
+    else:
+        protein_factor = 1.6 if training_days >= 2 else 1.4
+        fat_factor = .9
+
+    protein = max(70, round_step(weight * protein_factor, 5))
+    fat = max(50, round_step(weight * fat_factor, 5))
+    carbs = max(80, round_step((calories - protein * 4 - fat * 9) / 4, 5))
+    water = round(min(4.5, max(2.0, weight * .035 + (.3 if training_days >= 4 else 0))), 1)
+
+    if goal_type == "maintain":
+        final_goal = weight
+    else:
+        final_goal = float(form["final_goal"])
+        if goal_type == "gain" and final_goal <= weight:
+            raise ValueError("Para ganhar peso, a meta final precisa ser maior que o peso atual.")
+        if goal_type == "loss" and final_goal >= weight:
+            raise ValueError("Para reduzir peso, a meta final precisa ser menor que o peso atual.")
+        if not 35 <= final_goal <= 300:
+            raise ValueError("Confira a meta final informada.")
+
+    goal_weight = first_stage_goal(weight, final_goal, goal_type)
+    difference = abs(final_goal - weight)
+    estimated_weeks = difference / weekly_target if weekly_target > 0 else 0
+
+    return {
+        "age": age,
+        "height": height_cm / 100,
+        "weight": weight,
+        "sex": sex,
+        "activity_level": activity_level,
+        "goal_type": goal_type,
+        "training_days": training_days,
+        "appetite_level": appetite_level,
+        "meals_per_day": meals_per_day,
+        "budget_monthly": budget_monthly,
+        "restrictions": restrictions,
+        "bmr": round(bmr),
+        "tdee": round(tdee),
+        "calories": calories,
+        "protein": protein,
+        "carbs": carbs,
+        "fat": fat,
+        "water": water,
+        "weekly_target": weekly_target,
+        "goal_weight": goal_weight,
+        "final_goal": final_goal,
+        "estimated_weeks": estimated_weeks,
+        "pace": pace,
+    }
+
+
+def reminder_times(meals_per_day: int) -> list[str]:
+    schedules = {
+        3: ["08:00", "13:00", "20:00"],
+        4: ["07:30", "12:00", "16:00", "20:30"],
+        5: ["07:30", "10:30", "13:30", "17:00", "20:30"],
+        6: ["07:00", "10:00", "13:00", "16:00", "19:00", "22:00"],
+    }
+    return schedules.get(meals_per_day, schedules[4])
+
+
 def allowed_image(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_IMAGES
 
@@ -445,8 +631,11 @@ def register():
         except sqlite3.IntegrityError:
             flash("Este e-mail já está cadastrado.")
             return render_template("register.html")
-        flash("Conta criada. Agora entre no TITAN.")
-        return redirect(url_for("login"))
+        session.clear()
+        session["user_id"] = cur.lastrowid
+        csrf_token()
+        flash("Conta criada. Responda à avaliação inicial para o TITAN calcular suas metas.")
+        return redirect(url_for("onboarding"))
     return render_template("register.html")
 
 
@@ -472,6 +661,79 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+
+@app.route("/avaliacao", methods=["GET", "POST"])
+@login_required
+def onboarding():
+    user_id = current_user_id()
+    with db_conn() as db:
+        s = get_settings(db, user_id)
+        if request.method == "POST":
+            try:
+                plan = calculate_initial_plan(request.form)
+            except (ValueError, KeyError, TypeError) as exc:
+                flash(str(exc) if str(exc) else "Confira as respostas do questionário.")
+                return render_template("onboarding.html", s=s, hide_nav=True)
+
+            db.execute("""UPDATE settings SET
+                age=?,height=?,start_weight=?,goal_weight=?,final_goal=?,calories=?,protein=?,carbs=?,fat=?,water=?,weekly_target=?,
+                sex=?,activity_level=?,goal_type=?,training_days=?,appetite_level=?,meals_per_day=?,budget_monthly=?,restrictions=?,
+                bmr=?,tdee=?,onboarding_completed=1,calculation_version='TITAN-1.0'
+                WHERE user_id=?""", (
+                plan["age"], plan["height"], plan["weight"], plan["goal_weight"], plan["final_goal"],
+                plan["calories"], plan["protein"], plan["carbs"], plan["fat"], plan["water"], plan["weekly_target"],
+                plan["sex"], plan["activity_level"], plan["goal_type"], plan["training_days"], plan["appetite_level"],
+                plan["meals_per_day"], plan["budget_monthly"], plan["restrictions"], plan["bmr"], plan["tdee"], user_id
+            ))
+            db.execute("""INSERT INTO weights(user_id,day,weight) VALUES(?,?,?)
+                          ON CONFLICT(user_id,day) DO UPDATE SET weight=excluded.weight""",
+                       (user_id, today(), plan["weight"]))
+            db.execute("UPDATE plan_settings SET meals_per_day=? WHERE user_id=?",
+                       (plan["meals_per_day"], user_id))
+
+            # Cria horários iniciais sem apagar lembretes personalizados.
+            db.execute("DELETE FROM reminders WHERE user_id=? AND title LIKE 'Refeição % (TITAN)'", (user_id,))
+            for index, time_value in enumerate(reminder_times(plan["meals_per_day"]), start=1):
+                db.execute("INSERT INTO reminders(user_id,title,time,days,enabled) VALUES(?,?,?,?,1)",
+                           (user_id, f"Refeição {index} (TITAN)", time_value, "Todos os dias"))
+            db.commit()
+            session["show_onboarding_result"] = True
+            return redirect(url_for("onboarding_result"))
+    return render_template("onboarding.html", s=s, hide_nav=True)
+
+
+@app.get("/avaliacao/resultado")
+@login_required
+def onboarding_result():
+    with db_conn() as db:
+        s = get_settings(db, current_user_id())
+    if not s["onboarding_completed"]:
+        return redirect(url_for("onboarding"))
+    activity_names = {
+        "sedentary": "Sedentário",
+        "light": "Levemente ativo",
+        "moderate": "Moderadamente ativo",
+        "high": "Muito ativo",
+        "very_high": "Extremamente ativo",
+    }
+    goal_names = {"gain": "Ganhar peso e massa muscular", "maintain": "Manter o peso", "loss": "Reduzir peso"}
+    weeks = abs(s["final_goal"] - s["start_weight"]) / s["weekly_target"] if s["weekly_target"] else 0
+    daily_budget = s["budget_monthly"] / 30 if s["budget_monthly"] else 0
+    meal_budget = daily_budget / s["meals_per_day"] if daily_budget else 0
+    tips = []
+    if s["goal_type"] == "gain" and s["appetite_level"] == "low":
+        tips.append("Como seu apetite é baixo, o plano começa com superávit moderado e prioriza alimentos mais densos e opções líquidas.")
+    if s["training_days"] < 2 and s["goal_type"] == "gain":
+        tips.append("Para favorecer ganho muscular, registre e progrida nos treinos de força; apenas aumentar calorias não garante que o peso ganho seja músculo.")
+    if s["budget_monthly"]:
+        tips.append(f"Seu limite inicial é de aproximadamente R$ {daily_budget:.2f} por dia e R$ {meal_budget:.2f} por refeição.")
+    tips.append("Depois de 14 dias de registros, o TITAN compara peso e consumo real para sugerir ajustes graduais.")
+    return render_template("onboarding_result.html", s=s, weeks=weeks, tips=tips,
+                           activity_name=activity_names.get(s["activity_level"], s["activity_level"]),
+                           goal_name=goal_names.get(s["goal_type"], s["goal_type"]),
+                           daily_budget=daily_budget, meal_budget=meal_budget, hide_nav=True)
 
 
 @app.route("/")

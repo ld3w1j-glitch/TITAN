@@ -2,6 +2,7 @@
 <div class="hero"><div><small>PROJETO DE {{ g.user.name|upper }}</small><h1>De {{ '%.1f'|format(s.start_weight) }} kg para {{ '%.0f'|format(s.goal_weight) }} kg</h1>
 <p>Meta final: {{ '%.0f'|format(s.final_goal) }} kg • acompanhe alimentação, treino e recuperação sem perder os detalhes.</p></div>
 <form class="datebox"><input type="date" name="day" value="{{ day }}"><button>Ver dia</button></form></div>
+<div class="calculated-strip"><span>Metas calculadas pela avaliação inicial</span><b>TMB {{ s.bmr|round|int }} kcal</b><b>Manutenção {{ s.tdee|round|int }} kcal</b><a href="{{ url_for('onboarding') }}">recalcular</a></div>
 <div class="grid stats">
 <article><span>Peso atual</span><strong>{{ '%.1f'|format(latest_weight) }} kg</strong><small>IMC {{ '%.1f'|format(bmi) }}</small></article>
 <article><span>Calorias do dia</span><strong>{{ '%.0f'|format(totals.calories) }} / {{ s.calories }}</strong><small>{{ '%.0f'|format(s.calories-totals.calories) if totals.calories<s.calories else 'meta atingida' }} kcal</small></article>

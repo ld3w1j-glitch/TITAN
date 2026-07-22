@@ -1,4 +1,4 @@
-# Projeto TITAN V3.1 — Base V2 preservada
+# Projeto TITAN V3.2 — Base V2 preservada
 
 Esta versão foi reconstruída sobre a experiência visual e nutricional da V2. Ela mantém kcal e macros por alimento e por refeição e acrescenta login, fotos, previsões, análise automática, comparador de mercados, calendário, exercícios com mídia e deploy no Railway.
 
@@ -30,3 +30,10 @@ O sistema usa um worker do Gunicorn para reduzir conflitos de escrita no SQLite.
 
 ## Windows
 Execute `executar.bat`. Na primeira abertura, o ambiente virtual e as dependências serão instalados.
+
+
+## Avaliação inicial automática
+
+Na primeira entrada, cada usuário responde a um questionário de cinco etapas. O TITAN estima TMB, gasto diário, meta calórica, proteína, carboidratos, gorduras, água, primeira etapa de peso, ritmo semanal e horários iniciais de refeições. O questionário pode ser refeito em **Metas**.
+
+As metas são estimativas iniciais e devem ser ajustadas pela evolução registrada.
