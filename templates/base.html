@@ -37,7 +37,7 @@
 {% set endpoint = request.endpoint %}
 {% set nutrition_endpoints = ['foods','edit_food','delete_food'] %}
 {% set progress_endpoints = ['progress','uploaded_file','delete_photo'] %}
-{% set workout_endpoints = ['workouts','delete_exercise'] %}
+{% set workout_endpoints = ['workouts','exercise_catalog','add_catalog_exercise','delete_exercise'] %}
 {% set planner_endpoints = ['planner','planner_delete','planner_pdf'] %}
 {% set market_endpoints = ['markets','delete_store'] %}
 {% set calendar_endpoints = ['calendar_page','delete_calendar_item','delete_reminder','calendar_ics'] %}
@@ -115,6 +115,7 @@
           {% if endpoint == 'dashboard' %}Meu dia
           {% elif endpoint in nutrition_endpoints %}Alimentação
           {% elif endpoint in progress_endpoints %}Evolução
+          {% elif endpoint == 'exercise_catalog' or endpoint == 'add_catalog_exercise' %}Catálogo de exercícios
           {% elif endpoint in workout_endpoints %}Treinos
           {% elif endpoint in planner_endpoints %}Marmitas
           {% elif endpoint in market_endpoints %}Supermercados

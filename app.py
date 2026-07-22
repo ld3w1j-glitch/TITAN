@@ -2163,6 +2163,95 @@ def workouts():
     return render_template("workouts.html", today=today(), exercises=exercises, workouts=history, strength=strength)
 
 
+@app.get("/exercise-catalog")
+@login_required
+def exercise_catalog():
+    user_id = current_user_id()
+    query = request.args.get("q", "").strip()[:100]
+    selected_group = request.args.get("group", "").strip()[:60]
+    with db_conn() as db:
+        catalog = db.execute("""
+            SELECT c.*,
+                   (SELECT MIN(e.id)
+                      FROM exercises e
+                     WHERE e.user_id=? AND e.catalog_key=c.catalog_key) AS routine_exercise_id
+              FROM exercise_catalog c
+             WHERE c.active=1
+             ORDER BY c.sort_order,c.name
+        """, (user_id,)).fetchall()
+        group_rows = db.execute("""
+            SELECT primary_group,COUNT(*) AS total,MIN(sort_order) AS first_position
+              FROM exercise_catalog
+             WHERE active=1
+             GROUP BY primary_group
+             ORDER BY first_position,primary_group
+        """).fetchall()
+        routine_count = db.execute(
+            "SELECT COUNT(*) FROM exercises WHERE user_id=?", (user_id,)
+        ).fetchone()[0]
+
+    valid_groups = {row["primary_group"] for row in group_rows}
+    if selected_group not in valid_groups:
+        selected_group = ""
+    return render_template(
+        "exercise_catalog.html",
+        catalog=catalog,
+        groups=group_rows,
+        routine_count=routine_count,
+        query=query,
+        selected_group=selected_group,
+    )
+
+
+@app.post("/exercise-catalog/add/<catalog_key>")
+@login_required
+def add_catalog_exercise(catalog_key):
+    user_id = current_user_id()
+    with db_conn() as db:
+        catalog_item = db.execute(
+            "SELECT * FROM exercise_catalog WHERE catalog_key=? AND active=1",
+            (catalog_key,),
+        ).fetchone()
+        if not catalog_item:
+            abort(404)
+
+        existing = db.execute("""
+            SELECT id FROM exercises
+             WHERE user_id=?
+               AND (catalog_key=? OR (catalog_key='' AND lower(name)=lower(?)))
+             ORDER BY id
+             LIMIT 1
+        """, (user_id, catalog_key, catalog_item["name"])).fetchone()
+        if existing:
+            db.execute(
+                "UPDATE exercises SET catalog_key=? WHERE id=? AND catalog_key=''",
+                (catalog_key, existing["id"]),
+            )
+            db.commit()
+            flash(f'{catalog_item["name"]} já está na sua rotina.')
+        else:
+            db.execute("""
+                INSERT INTO exercises(
+                    user_id,name,muscle,description,image_filename,video_url,catalog_key
+                ) VALUES(?,?,?,?,?,?,?)
+            """, (
+                user_id,
+                catalog_item["name"],
+                catalog_item["primary_group"],
+                catalog_item["description"],
+                catalog_item["image_filename"],
+                catalog_item["video_url"],
+                catalog_item["catalog_key"],
+            ))
+            db.commit()
+            flash(f'{catalog_item["name"]} foi adicionado à sua rotina.')
+
+    query = request.form.get("q", "").strip()[:100]
+    selected_group = request.form.get("group", "").strip()[:60]
+    destination = url_for("exercise_catalog", q=query, group=selected_group)
+    return redirect(f"{destination}#exercise-{catalog_key}")
+
+
 @app.post("/exercise/delete/<int:item_id>")
 @login_required
 def delete_exercise(item_id):

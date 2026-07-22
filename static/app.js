@@ -67,3 +67,70 @@ function activateNotifications(){
     if(empty)empty.hidden=visible!==0;
   });
 })();
+
+(function exerciseCatalog(){
+  const browser=document.querySelector('[data-exercise-catalog]');
+  if(!browser)return;
+
+  const input=browser.querySelector('[data-catalog-search]');
+  const clearButton=browser.querySelector('[data-catalog-clear]');
+  const cards=[...browser.querySelectorAll('[data-catalog-card]')];
+  const filterButtons=[...browser.querySelectorAll('[data-catalog-filter]')];
+  const resetButtons=[...browser.querySelectorAll('[data-catalog-reset]')];
+  const count=browser.querySelector('[data-catalog-count]');
+  const empty=browser.querySelector('[data-catalog-empty]');
+  const formQueries=[...browser.querySelectorAll('[data-catalog-form-query]')];
+  const formGroups=[...browser.querySelectorAll('[data-catalog-form-group]')];
+  const normalize=value=>(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase().trim();
+  let selectedGroup=filterButtons.find(button=>button.classList.contains('active'))?.dataset.catalogFilter||'';
+
+  function updateUrl(query){
+    const url=new URL(window.location.href);
+    query ? url.searchParams.set('q',query) : url.searchParams.delete('q');
+    selectedGroup ? url.searchParams.set('group',selectedGroup) : url.searchParams.delete('group');
+    window.history.replaceState({},'',url.pathname+url.search+url.hash);
+  }
+
+  function applyFilters(){
+    const rawQuery=input?.value.trim()||'';
+    const query=normalize(rawQuery);
+    let visible=0;
+    cards.forEach(card=>{
+      const matchesText=!query||normalize(card.dataset.catalogText).includes(query);
+      const matchesGroup=!selectedGroup||card.dataset.catalogGroup===selectedGroup;
+      const show=matchesText&&matchesGroup;
+      card.hidden=!show;
+      if(show)visible+=1;
+    });
+    if(count)count.textContent=String(visible);
+    if(empty)empty.hidden=visible!==0;
+    if(clearButton)clearButton.hidden=!rawQuery;
+    formQueries.forEach(field=>{field.value=rawQuery;});
+    formGroups.forEach(field=>{field.value=selectedGroup;});
+    updateUrl(rawQuery);
+  }
+
+  function chooseGroup(group){
+    selectedGroup=group;
+    filterButtons.forEach(button=>{
+      const active=button.dataset.catalogFilter===selectedGroup;
+      button.classList.toggle('active',active);
+      button.setAttribute('aria-pressed',String(active));
+    });
+    applyFilters();
+  }
+
+  input?.addEventListener('input',applyFilters);
+  clearButton?.addEventListener('click',()=>{
+    input.value='';
+    input.focus();
+    applyFilters();
+  });
+  filterButtons.forEach(button=>button.addEventListener('click',()=>chooseGroup(button.dataset.catalogFilter||'')));
+  resetButtons.forEach(button=>button.addEventListener('click',()=>{
+    if(input)input.value='';
+    chooseGroup('');
+    input?.focus();
+  }));
+  applyFilters();
+})();

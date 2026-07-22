@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Catálogo de exercícios • TITAN{% endblock %}
+{% block content %}
+<div class="hero catalog-hero">
+  <div>
+    <small>MONTE SUA ROTINA</small>
+    <h1>Catálogo de exercícios</h1>
+    <p>Pesquise por nome, músculo ou equipamento e adicione somente os exercícios que fazem parte do seu treino.</p>
+  </div>
+  <div class="hero-actions">
+    <span class="routine-summary"><b>{{ routine_count }}</b><small>na sua rotina</small></span>
+    <a class="button ghost" href="{{ url_for('workouts') }}">Voltar aos treinos</a>
+  </div>
+</div>
+
+<section class="panel catalog-browser" data-exercise-catalog>
+  <div class="catalog-toolbar">
+    <label class="catalog-search">
+      <span>Pesquisar no catálogo</span>
+      <div>
+        <span aria-hidden="true">⌕</span>
+        <input
+          type="search"
+          value="{{ query }}"
+          placeholder="Ex.: supino, glúteos ou halteres"
+          autocomplete="off"
+          aria-label="Pesquisar exercícios"
+          data-catalog-search
+        >
+        <button type="button" class="catalog-clear" data-catalog-clear {% if not query %}hidden{% endif %}>Limpar</button>
+      </div>
+    </label>
+    <div class="catalog-result-summary" aria-live="polite">
+      <strong data-catalog-count>{{ catalog|length }}</strong>
+      <span>exercícios encontrados</span>
+    </div>
+  </div>
+
+  <div class="catalog-filter-heading">
+    <div>
+      <b>Filtrar por grupo muscular</b>
+      <small>Escolha uma região para reduzir a lista.</small>
+    </div>
+    <button type="button" class="catalog-reset" data-catalog-reset>Mostrar todos</button>
+  </div>
+  <div class="catalog-filters" role="group" aria-label="Grupos musculares">
+    <button type="button" class="catalog-filter {% if not selected_group %}active{% endif %}" data-catalog-filter="" aria-pressed="{{ 'true' if not selected_group else 'false' }}">
+      Todos <span>{{ catalog|length }}</span>
+    </button>
+    {% for group in groups %}
+    <button type="button" class="catalog-filter {% if selected_group == group.primary_group %}active{% endif %}" data-catalog-filter="{{ group.primary_group }}" aria-pressed="{{ 'true' if selected_group == group.primary_group else 'false' }}">
+      {{ group.primary_group }} <span>{{ group.total }}</span>
+    </button>
+    {% endfor %}
+  </div>
+
+  <div class="catalog-grid" data-catalog-grid>
+    {% for exercise in catalog %}
+    <article
+      class="catalog-card {% if exercise.routine_exercise_id %}in-routine{% endif %}"
+      id="exercise-{{ exercise.catalog_key }}"
+      data-catalog-card
+      data-catalog-group="{{ exercise.primary_group }}"
+      data-catalog-text="{{ exercise.name }} {{ exercise.primary_group }} {{ exercise.secondary_muscles }} {{ exercise.muscle_region }} {{ exercise.equipment }} {{ exercise.modality }}"
+    >
+      <div class="catalog-card-visual" aria-hidden="true">
+        <span>{{ exercise.primary_group[:2]|upper }}</span>
+        <small>{{ exercise.modality }}</small>
+      </div>
+      <div class="catalog-card-body">
+        <div class="catalog-card-topline">
+          <span class="catalog-group-badge">{{ exercise.primary_group }}</span>
+          <span class="difficulty-badge difficulty-{{ exercise.difficulty|lower }}">{{ exercise.difficulty }}</span>
+        </div>
+        <h2>{{ exercise.name }}</h2>
+        <p>{{ exercise.description }}</p>
+        <dl class="catalog-details">
+          <div><dt>Região</dt><dd>{{ exercise.muscle_region }}</dd></div>
+          <div><dt>Equipamento</dt><dd>{{ exercise.equipment }}</dd></div>
+          {% if exercise.secondary_muscles %}<div><dt>Também trabalha</dt><dd>{{ exercise.secondary_muscles }}</dd></div>{% endif %}
+          <div><dt>Como registrar</dt><dd>{{ exercise.tracking_method }}</dd></div>
+        </dl>
+        {% if exercise.routine_exercise_id %}
+        <a class="catalog-added" href="{{ url_for('workouts') }}#exercise-{{ exercise.routine_exercise_id }}">
+          <span aria-hidden="true">✓</span> Já está na sua rotina
+        </a>
+        {% else %}
+        <form method="post" action="{{ url_for('add_catalog_exercise',catalog_key=exercise.catalog_key) }}" class="catalog-add-form">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="q" value="{{ query }}" data-catalog-form-query>
+          <input type="hidden" name="group" value="{{ selected_group }}" data-catalog-form-group>
+          <button type="submit"><span aria-hidden="true">＋</span> Adicionar à rotina</button>
+        </form>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  <div class="catalog-empty" data-catalog-empty hidden>
+    <span aria-hidden="true">⌕</span>
+    <h2>Nenhum exercício encontrado</h2>
+    <p>Tente outro nome ou limpe o filtro de grupo muscular.</p>
+    <button type="button" data-catalog-reset>Limpar pesquisa e filtros</button>
+  </div>
+</section>
+{% endblock %}
