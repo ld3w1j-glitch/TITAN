@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Criar conta • TITAN{% endblock %}{% block content %}
+<section class="auth-card"><div class="auth-logo">TITAN<span>EVOLUÇÃO FÍSICA</span></div><h1>Inicie seu projeto</h1>
+<form method="post" class="form"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+<label>Nome<input name="name" required autocomplete="name"></label><label>E-mail<input type="email" name="email" required autocomplete="email"></label>
+<label>Senha<input type="password" name="password" minlength="6" required autocomplete="new-password"></label><button>Criar conta</button></form>
+<p class="auth-switch">Já possui conta? <a href="{{ url_for('login') }}">Entrar</a></p></section>{% endblock %}

@@ -1,5 +1,9 @@
 __pycache__/
-*.pyc
+*.py[cod]
 .env
-*.db
-uploads/
+venv/
+.venv/
+titan.db
+titan.db-*
+uploads/*
+!uploads/.gitkeep

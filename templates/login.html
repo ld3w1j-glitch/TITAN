@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block title %}Entrar • TITAN{% endblock %}{% block content %}
+<section class="auth-card"><div class="auth-logo">TITAN<span>EVOLUÇÃO FÍSICA</span></div><h1>Entre no seu projeto</h1>
+<p class="muted">Cada pessoa possui alimentos, refeições, fotos e evolução separados.</p>
+<form method="post" class="form"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+<label>E-mail<input type="email" name="email" required autocomplete="email"></label>
+<label>Senha<input type="password" name="password" required autocomplete="current-password"></label><button>Entrar</button></form>
+<p class="auth-switch">Ainda não possui conta? <a href="{{ url_for('register') }}">Criar conta</a></p></section>{% endblock %}

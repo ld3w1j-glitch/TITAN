@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0e12"><title>{% block title %}Projeto TITAN{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+</head>
+<body>
+{% if g.user %}
+<header class="topbar">
+  <a class="brand" href="{{ url_for('dashboard') }}">TITAN <span>EVOLUÇÃO FÍSICA</span></a>
+  <button class="menu-button" type="button" onclick="document.querySelector('nav').classList.toggle('open')">☰</button>
+  <nav>
+    <a href="{{ url_for('dashboard') }}">Painel</a><a href="{{ url_for('foods') }}">Alimentos</a>
+    <a href="{{ url_for('progress') }}">Evolução</a><a href="{{ url_for('workouts') }}">Treinos</a>
+    <a href="{{ url_for('planner') }}">Marmitas</a><a href="{{ url_for('markets') }}">Mercados</a>
+    <a href="{{ url_for('calendar_page') }}">Agenda</a><a href="{{ url_for('settings_page') }}">Metas</a>
+    <a class="user-link" href="{{ url_for('logout') }}">{{ g.user.name }} • sair</a>
+  </nav>
+</header>
+{% endif %}
+<main class="{% if not g.user %}auth-main{% endif %}">
+{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}
+{% block content %}{% endblock %}
+</main>
+{% if g.user %}<footer>Projeto TITAN • análise automática de acompanhamento • não substitui médico, nutricionista ou educador físico</footer>{% endif %}
+<script src="{{ url_for('static',filename='app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body></html>
