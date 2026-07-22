@@ -57,6 +57,150 @@ VERIFICATION_MAX_ATTEMPTS = 5
 VERIFICATION_RESEND_SECONDS = 60
 UNDO_TTL_SECONDS = 10 * 60
 
+TRACK_LOAD = "Séries, repetições e carga"
+TRACK_REPS = "Séries e repetições"
+TRACK_TIME = "Séries e tempo"
+TRACK_CARDIO = "Tempo, distância e intensidade"
+TRACK_MOBILITY = "Séries, tempo e amplitude"
+
+# Catálogo global V1. Cada item possui uma chave estável para receber imagem,
+# vídeo e futuras melhorias sem depender do nome exibido ao usuário.
+# Campos: chave, nome, modalidade, grupo principal, músculos secundários,
+# região, equipamento, nível, registro e orientação curta.
+EXERCISE_CATALOG = (
+    # Peitoral
+    ("supino_reto", "Supino reto", "Musculação", "Peitoral", "Tríceps, ombro anterior", "Peitoral médio", "Barra e banco", "Intermediário", TRACK_LOAD, "Mantenha escápulas apoiadas, pés firmes e desça a barra com controle."),
+    ("supino_inclinado", "Supino inclinado", "Musculação", "Peitoral", "Tríceps, ombro anterior", "Peitoral superior", "Barra e banco inclinado", "Intermediário", TRACK_LOAD, "Use inclinação moderada e mantenha as escápulas firmes no banco."),
+    ("supino_declinado", "Supino declinado", "Musculação", "Peitoral", "Tríceps, ombro anterior", "Peitoral inferior", "Barra e banco declinado", "Intermediário", TRACK_LOAD, "Mantenha o corpo estabilizado e controle a barra em toda a amplitude."),
+    ("crucifixo_halteres", "Crucifixo com halteres", "Musculação", "Peitoral", "Ombro anterior", "Peitoral médio", "Halteres e banco", "Iniciante", TRACK_LOAD, "Conserve os cotovelos levemente flexionados e evite alongar além do controle."),
+    ("crossover_polia", "Crossover na polia", "Musculação", "Peitoral", "Ombro anterior", "Peitoral médio e inferior", "Polia dupla", "Iniciante", TRACK_LOAD, "Aproxime as mãos à frente do corpo sem perder a posição dos ombros."),
+    ("peck_deck", "Peck deck", "Musculação", "Peitoral", "Ombro anterior", "Peitoral médio", "Máquina", "Iniciante", TRACK_LOAD, "Ajuste o banco para alinhar os braços ao peito e controle o retorno."),
+    ("flexao_bracos", "Flexão de braços", "Calistenia", "Peitoral", "Tríceps, ombro anterior, core", "Peitoral médio", "Peso corporal", "Iniciante", TRACK_REPS, "Mantenha o corpo alinhado e aproxime o peito do chão com controle."),
+    ("paralelas_peitoral", "Paralelas com foco no peito", "Calistenia", "Peitoral", "Tríceps, ombro anterior", "Peitoral inferior", "Barras paralelas", "Avançado", TRACK_REPS, "Incline levemente o tronco e use amplitude compatível com seus ombros."),
+
+    # Costas
+    ("puxada_alta", "Puxada alta", "Musculação", "Costas", "Bíceps, antebraços", "Grande dorsal", "Polia alta", "Iniciante", TRACK_LOAD, "Puxe os cotovelos para baixo sem balançar o tronco."),
+    ("barra_fixa_pronada", "Barra fixa pronada", "Calistenia", "Costas", "Bíceps, antebraços, core", "Grande dorsal", "Barra fixa", "Avançado", TRACK_REPS, "Inicie com as escápulas controladas e evite impulsionar as pernas."),
+    ("puxada_neutra", "Puxada com pegada neutra", "Musculação", "Costas", "Bíceps, antebraços", "Grande dorsal", "Polia alta", "Iniciante", TRACK_LOAD, "Conduza os cotovelos para baixo mantendo o peito aberto."),
+    ("pulldown_bracos_retos", "Pulldown com braços retos", "Musculação", "Costas", "Tríceps, core", "Grande dorsal", "Polia alta", "Intermediário", TRACK_LOAD, "Mantenha os braços quase estendidos e mova pelos ombros, não pela lombar."),
+    ("pullover_halter", "Pullover com halter", "Musculação", "Costas", "Peitoral, tríceps", "Grande dorsal", "Halter e banco", "Intermediário", TRACK_LOAD, "Desça o halter somente até manter ombros e coluna confortáveis."),
+    ("remada_unilateral", "Remada unilateral", "Musculação", "Costas", "Bíceps, ombro posterior", "Dorsal e região central", "Halter e banco", "Iniciante", TRACK_LOAD, "Puxe o cotovelo em direção ao quadril sem girar o tronco."),
+    ("remada_baixa", "Remada baixa", "Musculação", "Costas", "Bíceps, ombro posterior", "Romboides e trapézio médio", "Polia baixa", "Iniciante", TRACK_LOAD, "Puxe com os cotovelos e controle a volta sem arredondar a coluna."),
+    ("remada_curvada", "Remada curvada", "Musculação", "Costas", "Bíceps, lombar, ombro posterior", "Romboides e dorsal", "Barra", "Intermediário", TRACK_LOAD, "Mantenha a coluna neutra e o tronco estável durante a remada."),
+    ("remada_cavalinho", "Remada cavalinho", "Musculação", "Costas", "Bíceps, ombro posterior", "Região central", "Barra T ou máquina", "Intermediário", TRACK_LOAD, "Aproxime a carga do tronco sem elevar excessivamente os ombros."),
+    ("remada_maquina", "Remada na máquina", "Musculação", "Costas", "Bíceps, ombro posterior", "Romboides e trapézio médio", "Máquina", "Iniciante", TRACK_LOAD, "Ajuste o apoio para manter o peito firme e controle as escápulas."),
+
+    # Trapézio
+    ("encolhimento_halteres", "Encolhimento com halteres", "Musculação", "Trapézio", "Antebraços", "Trapézio superior", "Halteres", "Iniciante", TRACK_LOAD, "Eleve os ombros verticalmente sem girá-los para frente ou para trás."),
+    ("caminhada_fazendeiro", "Caminhada do fazendeiro", "Funcional", "Trapézio", "Antebraços, core, panturrilhas", "Trapézio superior e pegada", "Halteres ou kettlebells", "Intermediário", TRACK_CARDIO, "Caminhe com postura alta, passos controlados e cargas equilibradas."),
+    ("elevacao_y", "Elevação em Y", "Musculação", "Trapézio", "Ombro posterior", "Trapézio médio e inferior", "Halteres leves ou polia", "Intermediário", TRACK_LOAD, "Eleve os braços em Y sem compensar com a lombar ou encolher os ombros."),
+
+    # Ombros
+    ("desenvolvimento_militar", "Desenvolvimento militar", "Musculação", "Ombros", "Tríceps, trapézio, core", "Deltoide anterior", "Barra", "Intermediário", TRACK_LOAD, "Mantenha abdômen firme e evite arquear excessivamente a lombar."),
+    ("desenvolvimento_arnold", "Desenvolvimento Arnold", "Musculação", "Ombros", "Tríceps", "Deltoide anterior e lateral", "Halteres", "Intermediário", TRACK_LOAD, "Gire os braços de forma controlada e sem perder o alinhamento dos punhos."),
+    ("elevacao_frontal", "Elevação frontal", "Musculação", "Ombros", "Peitoral superior", "Deltoide anterior", "Halteres, barra ou polia", "Iniciante", TRACK_LOAD, "Eleve até a linha dos ombros sem usar impulso do tronco."),
+    ("landmine_press", "Landmine press", "Musculação", "Ombros", "Peitoral superior, tríceps, core", "Deltoide anterior", "Barra landmine", "Intermediário", TRACK_LOAD, "Empurre a barra em diagonal mantendo costelas e quadril controlados."),
+    ("elevacao_lateral_halteres", "Elevação lateral com halteres", "Musculação", "Ombros", "Trapézio", "Deltoide lateral", "Halteres", "Iniciante", TRACK_LOAD, "Eleve os braços com cotovelos suaves e sem encolher os ombros."),
+    ("elevacao_lateral_cabo", "Elevação lateral no cabo", "Musculação", "Ombros", "Trapézio", "Deltoide lateral", "Polia baixa", "Intermediário", TRACK_LOAD, "Mantenha tensão contínua e mova o braço sem inclinar o tronco."),
+    ("elevacao_lateral_maquina", "Elevação lateral na máquina", "Musculação", "Ombros", "Trapézio", "Deltoide lateral", "Máquina", "Iniciante", TRACK_LOAD, "Ajuste o assento para alinhar o eixo da máquina aos ombros."),
+    ("crucifixo_inverso", "Crucifixo inverso", "Musculação", "Ombros", "Romboides, trapézio médio", "Deltoide posterior", "Halteres, polia ou máquina", "Iniciante", TRACK_LOAD, "Abra os braços sem projetar a cabeça ou elevar os ombros."),
+    ("face_pull", "Face pull", "Musculação", "Ombros", "Trapézio médio, romboides, manguito rotador", "Deltoide posterior", "Polia e corda", "Iniciante", TRACK_LOAD, "Puxe a corda em direção ao rosto mantendo cotovelos elevados e controle."),
+    ("remada_alta", "Remada alta", "Musculação", "Ombros", "Trapézio, bíceps", "Deltoide lateral", "Barra, halteres ou polia", "Intermediário", TRACK_LOAD, "Use pegada confortável e não eleve os cotovelos além de uma amplitude segura."),
+
+    # Braços e antebraços
+    ("rosca_direta", "Rosca direta", "Musculação", "Bíceps", "Antebraços", "Bíceps braquial", "Barra", "Iniciante", TRACK_LOAD, "Mantenha os cotovelos próximos ao corpo e evite impulso."),
+    ("rosca_alternada", "Rosca alternada", "Musculação", "Bíceps", "Antebraços", "Bíceps braquial", "Halteres", "Iniciante", TRACK_LOAD, "Alterne os braços sem girar ou balançar o tronco."),
+    ("rosca_concentrada", "Rosca concentrada", "Musculação", "Bíceps", "Braquial", "Bíceps braquial", "Halter", "Iniciante", TRACK_LOAD, "Apoie o braço e complete o movimento sem retirar o cotovelo da posição."),
+    ("rosca_scott", "Rosca Scott", "Musculação", "Bíceps", "Braquial", "Bíceps braquial", "Banco Scott e barra", "Intermediário", TRACK_LOAD, "Não estenda o cotovelo de forma brusca no final da descida."),
+    ("rosca_inclinada", "Rosca inclinada", "Musculação", "Bíceps", "Braquial", "Cabeça longa do bíceps", "Halteres e banco inclinado", "Intermediário", TRACK_LOAD, "Mantenha os ombros apoiados e evite levar os cotovelos à frente."),
+    ("rosca_cabo", "Rosca no cabo", "Musculação", "Bíceps", "Antebraços", "Bíceps braquial", "Polia baixa", "Iniciante", TRACK_LOAD, "Conserve os cotovelos estáveis e aproveite a tensão contínua da polia."),
+    ("rosca_martelo", "Rosca martelo", "Musculação", "Bíceps", "Braquiorradial, antebraços", "Braquial", "Halteres ou corda", "Iniciante", TRACK_LOAD, "Mantenha as palmas voltadas uma para a outra e os punhos firmes."),
+    ("triceps_pulley", "Tríceps pulley", "Musculação", "Tríceps", "Antebraços", "Cabeças lateral e medial", "Polia alta e barra", "Iniciante", TRACK_LOAD, "Estenda os cotovelos sem afastá-los do corpo ou inclinar o tronco."),
+    ("triceps_corda", "Tríceps na corda", "Musculação", "Tríceps", "Antebraços", "Cabeças lateral e medial", "Polia alta e corda", "Iniciante", TRACK_LOAD, "Abra suavemente as pontas da corda ao finalizar a extensão."),
+    ("triceps_frances", "Tríceps francês", "Musculação", "Tríceps", "Core", "Cabeça longa", "Halter, barra ou polia", "Intermediário", TRACK_LOAD, "Mantenha os cotovelos apontados à frente e evite compensar com a lombar."),
+    ("triceps_testa", "Tríceps testa", "Musculação", "Tríceps", "Antebraços", "Cabeça longa", "Barra e banco", "Intermediário", TRACK_LOAD, "Controle a flexão dos cotovelos e mantenha os braços estáveis."),
+    ("triceps_coice", "Tríceps coice", "Musculação", "Tríceps", "Ombro posterior", "Cabeça lateral", "Halter ou polia", "Iniciante", TRACK_LOAD, "Fixe o braço junto ao tronco e mova somente o antebraço."),
+    ("supino_fechado", "Supino fechado", "Musculação", "Tríceps", "Peitoral, ombro anterior", "Tríceps completo", "Barra e banco", "Intermediário", TRACK_LOAD, "Use pegada confortável e mantenha os cotovelos próximos ao corpo."),
+    ("paralelas_triceps", "Paralelas com foco no tríceps", "Calistenia", "Tríceps", "Peitoral, ombro anterior", "Tríceps completo", "Barras paralelas", "Avançado", TRACK_REPS, "Mantenha o tronco mais vertical e use somente amplitude confortável."),
+    ("rosca_inversa", "Rosca inversa", "Musculação", "Antebraços", "Bíceps, braquial", "Extensores e braquiorradial", "Barra ou polia", "Intermediário", TRACK_LOAD, "Mantenha punhos neutros e cotovelos estáveis durante a subida."),
+    ("flexao_punho", "Flexão de punho", "Musculação", "Antebraços", "", "Flexores do antebraço", "Halteres ou barra", "Iniciante", TRACK_LOAD, "Apoie os antebraços e mova somente os punhos com controle."),
+    ("extensao_punho", "Extensão de punho", "Musculação", "Antebraços", "", "Extensores do antebraço", "Halteres ou barra", "Iniciante", TRACK_LOAD, "Use carga leve e evite retirar os antebraços do apoio."),
+    ("suspensao_barra", "Suspensão na barra", "Calistenia", "Antebraços", "Costas, ombros, core", "Pegada", "Barra fixa", "Iniciante", TRACK_TIME, "Sustente o corpo com ombros ativos e interrompa se perder a pegada segura."),
+
+    # Pernas e glúteos
+    ("agachamento_livre", "Agachamento livre", "Musculação", "Quadríceps", "Glúteos, posteriores, adutores, core", "Quadríceps completo", "Barra e suporte", "Intermediário", TRACK_LOAD, "Mantenha o tronco firme, joelhos na direção dos pés e calcanhares apoiados."),
+    ("leg_press", "Leg press", "Musculação", "Quadríceps", "Glúteos, posteriores", "Quadríceps completo", "Máquina leg press", "Iniciante", TRACK_LOAD, "Mantenha lombar apoiada e não trave os joelhos ao estender as pernas."),
+    ("cadeira_extensora", "Cadeira extensora", "Musculação", "Quadríceps", "", "Quadríceps completo", "Máquina", "Iniciante", TRACK_LOAD, "Alinhe o joelho ao eixo da máquina e controle a descida."),
+    ("avanco", "Avanço", "Musculação", "Quadríceps", "Glúteos, posteriores, adutores", "Quadríceps e glúteos", "Peso corporal ou halteres", "Intermediário", TRACK_LOAD, "Dê um passo estável e mantenha o joelho acompanhando a direção do pé."),
+    ("passada", "Passada", "Funcional", "Quadríceps", "Glúteos, posteriores, panturrilhas", "Quadríceps e glúteos", "Peso corporal ou halteres", "Intermediário", TRACK_LOAD, "Caminhe com passos controlados e tronco estável."),
+    ("agachamento_bulgaro", "Agachamento búlgaro", "Musculação", "Quadríceps", "Glúteos, posteriores, adutores", "Quadríceps e glúteos", "Banco e halteres", "Intermediário", TRACK_LOAD, "Ajuste a distância do pé dianteiro para manter equilíbrio e alinhamento."),
+    ("step_up", "Step-up", "Funcional", "Quadríceps", "Glúteos, posteriores, panturrilhas", "Quadríceps e glúteos", "Caixa ou banco", "Iniciante", TRACK_LOAD, "Suba empurrando pela perna apoiada sem impulsionar excessivamente a perna de trás."),
+    ("levantamento_terra_romeno", "Levantamento terra romeno", "Musculação", "Posterior de coxa", "Glúteos, lombar, antebraços", "Isquiotibiais", "Barra ou halteres", "Intermediário", TRACK_LOAD, "Leve o quadril para trás mantendo a coluna neutra e joelhos suaves."),
+    ("stiff", "Stiff", "Musculação", "Posterior de coxa", "Glúteos, lombar", "Isquiotibiais", "Barra ou halteres", "Intermediário", TRACK_LOAD, "Desça a carga junto às pernas sem perder a posição neutra da coluna."),
+    ("mesa_flexora", "Mesa flexora", "Musculação", "Posterior de coxa", "Panturrilhas", "Isquiotibiais", "Máquina", "Iniciante", TRACK_LOAD, "Mantenha o quadril apoiado e controle tanto a flexão quanto o retorno."),
+    ("cadeira_flexora", "Cadeira flexora", "Musculação", "Posterior de coxa", "Panturrilhas", "Isquiotibiais", "Máquina", "Iniciante", TRACK_LOAD, "Ajuste os apoios e evite retirar o quadril do assento."),
+    ("flexao_nordica", "Flexão nórdica", "Calistenia", "Posterior de coxa", "Glúteos, core", "Isquiotibiais", "Apoio para tornozelos", "Avançado", TRACK_REPS, "Desça lentamente com o corpo alinhado e use assistência quando necessário."),
+    ("good_morning", "Good morning", "Musculação", "Posterior de coxa", "Glúteos, lombar, core", "Isquiotibiais", "Barra", "Avançado", TRACK_LOAD, "Faça a dobradiça de quadril com carga moderada e coluna neutra."),
+    ("elevacao_pelvica", "Elevação pélvica", "Musculação", "Glúteos", "Posterior de coxa, core", "Glúteo máximo", "Barra e banco", "Iniciante", TRACK_LOAD, "Eleve o quadril sem hiperestender a lombar e mantenha os pés firmes."),
+    ("ponte_gluteos", "Ponte de glúteos", "Calistenia", "Glúteos", "Posterior de coxa, core", "Glúteo máximo", "Peso corporal", "Iniciante", TRACK_REPS, "Contraia os glúteos no topo mantendo costelas e pelve controladas."),
+    ("levantamento_terra_sumo", "Levantamento terra sumô", "Musculação", "Glúteos", "Adutores, quadríceps, posteriores, lombar", "Glúteo máximo", "Barra", "Intermediário", TRACK_LOAD, "Use base ampla, joelhos na direção dos pés e mantenha a barra próxima."),
+    ("coice_cabo", "Coice no cabo", "Musculação", "Glúteos", "Posterior de coxa", "Glúteo máximo", "Polia baixa", "Iniciante", TRACK_LOAD, "Estenda o quadril sem girar a pelve ou arquear a lombar."),
+    ("cadeira_abdutora", "Cadeira abdutora", "Musculação", "Abdutores", "Glúteos", "Glúteo médio e mínimo", "Máquina", "Iniciante", TRACK_LOAD, "Abra as pernas com controle mantendo quadril e tronco apoiados."),
+    ("caminhada_lateral_elastico", "Caminhada lateral com elástico", "Funcional", "Abdutores", "Glúteos, quadríceps", "Glúteo médio", "Miniband", "Iniciante", TRACK_REPS, "Mantenha tensão no elástico, joelhos alinhados e passos curtos."),
+    ("abducao_cabo", "Abdução no cabo", "Musculação", "Abdutores", "Glúteos", "Glúteo médio e mínimo", "Polia baixa", "Intermediário", TRACK_LOAD, "Afaste a perna sem inclinar o tronco ou girar o quadril."),
+    ("abducao_lateral_deitado", "Abdução lateral deitado", "Calistenia", "Abdutores", "Glúteos", "Glúteo médio", "Peso corporal ou miniband", "Iniciante", TRACK_REPS, "Mantenha a pelve empilhada e eleve a perna sem girar o pé para cima."),
+    ("cadeira_adutora", "Cadeira adutora", "Musculação", "Adutores", "", "Parte interna da coxa", "Máquina", "Iniciante", TRACK_LOAD, "Aproxime as pernas de forma controlada sem usar impulso."),
+    ("agachamento_sumo", "Agachamento sumô", "Musculação", "Adutores", "Glúteos, quadríceps, core", "Parte interna da coxa", "Halter, kettlebell ou barra", "Iniciante", TRACK_LOAD, "Use base ampla e mantenha joelhos acompanhando a direção dos pés."),
+    ("afundo_lateral", "Afundo lateral", "Funcional", "Adutores", "Glúteos, quadríceps", "Parte interna da coxa", "Peso corporal ou halteres", "Intermediário", TRACK_LOAD, "Desloque o quadril para trás na perna flexionada e mantenha a outra estendida."),
+    ("aducao_cabo", "Adução no cabo", "Musculação", "Adutores", "Core", "Parte interna da coxa", "Polia baixa", "Intermediário", TRACK_LOAD, "Cruze a perna de forma controlada sem girar a pelve."),
+    ("panturrilha_em_pe", "Panturrilha em pé", "Musculação", "Panturrilhas", "", "Gastrocnêmio", "Máquina, barra ou halteres", "Iniciante", TRACK_LOAD, "Eleve os calcanhares com joelhos estendidos e controle a descida."),
+    ("panturrilha_sentada", "Panturrilha sentada", "Musculação", "Panturrilhas", "", "Sóleo", "Máquina ou halter", "Iniciante", TRACK_LOAD, "Mantenha os joelhos flexionados e use amplitude controlada."),
+    ("panturrilha_leg_press", "Panturrilha no leg press", "Musculação", "Panturrilhas", "", "Gastrocnêmio", "Máquina leg press", "Iniciante", TRACK_LOAD, "Movimente somente os tornozelos e mantenha os joelhos estáveis."),
+    ("panturrilha_unilateral", "Panturrilha unilateral", "Musculação", "Panturrilhas", "Core", "Gastrocnêmio e sóleo", "Degrau ou máquina", "Intermediário", TRACK_LOAD, "Use apoio para equilíbrio e complete a mesma amplitude dos dois lados."),
+    ("panturrilha_degrau", "Panturrilha no degrau", "Calistenia", "Panturrilhas", "", "Gastrocnêmio", "Degrau", "Iniciante", TRACK_REPS, "Desça o calcanhar com controle e suba sem impulsionar o corpo."),
+    ("elevacao_ponta_pes", "Elevação da ponta dos pés", "Calistenia", "Tibial anterior", "", "Parte frontal da canela", "Parede ou peso corporal", "Iniciante", TRACK_REPS, "Mantenha os calcanhares apoiados e eleve o antepé de forma controlada."),
+    ("dorsiflexao_elastico", "Dorsiflexão com elástico", "Mobilidade", "Tibial anterior", "", "Parte frontal da canela", "Elástico", "Iniciante", TRACK_REPS, "Puxe a ponta do pé em direção à canela sem mover o joelho."),
+
+    # Abdômen, core e lombar
+    ("abdominal_tradicional", "Abdominal tradicional", "Calistenia", "Abdômen", "Flexores do quadril", "Reto abdominal", "Peso corporal", "Iniciante", TRACK_REPS, "Eleve o tronco sem puxar o pescoço e mantenha a lombar controlada."),
+    ("crunch_cabo", "Crunch no cabo", "Musculação", "Abdômen", "", "Reto abdominal", "Polia alta", "Intermediário", TRACK_LOAD, "Flexione o tronco pelo abdômen sem transformar o movimento em agachamento."),
+    ("abdominal_maquina", "Abdominal na máquina", "Musculação", "Abdômen", "Flexores do quadril", "Reto abdominal", "Máquina", "Iniciante", TRACK_LOAD, "Ajuste o equipamento e flexione o tronco com movimento controlado."),
+    ("abdominal_reverso", "Abdominal reverso", "Calistenia", "Abdômen", "Flexores do quadril", "Reto abdominal inferior", "Peso corporal", "Iniciante", TRACK_REPS, "Eleve a pelve suavemente sem usar balanço das pernas."),
+    ("elevacao_pernas", "Elevação de pernas", "Calistenia", "Abdômen", "Flexores do quadril, core", "Abdômen inferior", "Peso corporal", "Intermediário", TRACK_REPS, "Mantenha a lombar controlada e desça as pernas somente até preservar a postura."),
+    ("elevacao_joelhos_barra", "Elevação de joelhos na barra", "Calistenia", "Abdômen", "Flexores do quadril, antebraços, costas", "Abdômen inferior", "Barra fixa", "Intermediário", TRACK_REPS, "Evite balançar e aproxime os joelhos usando o abdômen."),
+    ("abdominal_canivete", "Abdominal canivete", "Calistenia", "Abdômen", "Flexores do quadril, core", "Reto abdominal", "Peso corporal", "Intermediário", TRACK_REPS, "Aproxime tronco e pernas com controle sem usar impulso."),
+    ("prancha_lateral", "Prancha lateral", "Calistenia", "Oblíquos", "Glúteos, ombros, core", "Oblíquos", "Peso corporal", "Iniciante", TRACK_TIME, "Mantenha cabeça, tronco e quadril alinhados durante todo o tempo."),
+    ("wood_chop", "Wood chop", "Funcional", "Oblíquos", "Ombros, core, glúteos", "Oblíquos", "Polia ou elástico", "Intermediário", TRACK_LOAD, "Gire o tronco de forma coordenada sem forçar a lombar."),
+    ("abdominal_bicicleta", "Abdominal bicicleta", "Calistenia", "Oblíquos", "Reto abdominal, flexores do quadril", "Oblíquos", "Peso corporal", "Iniciante", TRACK_REPS, "Alterne os lados lentamente sem puxar o pescoço."),
+    ("rotacao_cabo", "Rotação no cabo", "Musculação", "Oblíquos", "Core, ombros", "Oblíquos", "Polia", "Intermediário", TRACK_LOAD, "Mantenha quadril estável e gire sem movimentos bruscos."),
+    ("prancha_frontal", "Prancha frontal", "Calistenia", "Core", "Abdômen, ombros, glúteos", "Core profundo", "Peso corporal", "Iniciante", TRACK_TIME, "Mantenha o corpo alinhado, abdômen firme e respiração contínua."),
+    ("dead_bug", "Dead bug", "Funcional", "Core", "Abdômen, flexores do quadril", "Core profundo", "Peso corporal", "Iniciante", TRACK_REPS, "Mantenha a lombar apoiada enquanto alterna braços e pernas."),
+    ("bird_dog", "Bird dog", "Funcional", "Core", "Glúteos, lombar, ombros", "Core profundo", "Peso corporal", "Iniciante", TRACK_REPS, "Estenda braço e perna opostos sem girar a pelve."),
+    ("hollow_hold", "Hollow hold", "Calistenia", "Core", "Abdômen, flexores do quadril", "Core profundo", "Peso corporal", "Intermediário", TRACK_TIME, "Mantenha a lombar apoiada e ajuste braços ou pernas para preservar a posição."),
+    ("pallof_press", "Pallof press", "Funcional", "Core", "Oblíquos, glúteos", "Antirrotação", "Polia ou elástico", "Intermediário", TRACK_LOAD, "Resista à rotação enquanto estende os braços à frente do corpo."),
+    ("extensao_lombar", "Extensão lombar", "Musculação", "Lombar", "Glúteos, posteriores", "Eretores da coluna", "Banco romano", "Intermediário", TRACK_LOAD, "Eleve o tronco apenas até alinhar o corpo, sem hiperestender a coluna."),
+    ("superman", "Superman", "Calistenia", "Lombar", "Glúteos, ombros", "Eretores da coluna", "Peso corporal", "Iniciante", TRACK_TIME, "Eleve braços e pernas suavemente sem buscar amplitude excessiva."),
+
+    # Cardio e corpo inteiro
+    ("caminhada", "Caminhada", "Cardio", "Cardiorrespiratório", "Quadríceps, glúteos, posteriores, panturrilhas", "Corpo inteiro", "Esteira ou área livre", "Iniciante", TRACK_CARDIO, "Mantenha passada confortável e intensidade compatível com seu condicionamento."),
+    ("corrida", "Corrida", "Cardio", "Cardiorrespiratório", "Quadríceps, glúteos, posteriores, panturrilhas, core", "Corpo inteiro", "Esteira ou área livre", "Intermediário", TRACK_CARDIO, "Aumente volume e velocidade progressivamente, mantendo passada controlada."),
+    ("bicicleta", "Bicicleta", "Cardio", "Cardiorrespiratório", "Quadríceps, glúteos, posteriores, panturrilhas", "Membros inferiores", "Bicicleta ou ergométrica", "Iniciante", TRACK_CARDIO, "Ajuste o banco e mantenha cadência adequada à intensidade planejada."),
+    ("escada", "Escada", "Cardio", "Cardiorrespiratório", "Glúteos, quadríceps, panturrilhas", "Membros inferiores", "Escada ou simulador", "Intermediário", TRACK_CARDIO, "Suba com postura estável e evite apoiar todo o peso nos braços."),
+    ("remo_ergometro", "Remo ergométrico", "Cardio", "Cardiorrespiratório", "Costas, quadríceps, glúteos, bíceps, core", "Corpo inteiro", "Remo ergométrico", "Intermediário", TRACK_CARDIO, "Inicie pelas pernas, complete com o tronco e finalize puxando com os braços."),
+    ("corda", "Pular corda", "Cardio", "Cardiorrespiratório", "Panturrilhas, ombros, antebraços, core", "Corpo inteiro", "Corda", "Intermediário", TRACK_CARDIO, "Faça saltos baixos, aterrisse suavemente e gire a corda pelos punhos."),
+    ("kettlebell_swing", "Kettlebell swing", "Funcional", "Corpo inteiro", "Glúteos, posteriores, lombar, ombros, core", "Cadeia posterior", "Kettlebell", "Intermediário", TRACK_LOAD, "Gere força pelo quadril; os braços apenas conduzem o kettlebell."),
+    ("burpee", "Burpee", "Funcional", "Corpo inteiro", "Peitoral, ombros, tríceps, pernas, core", "Corpo inteiro", "Peso corporal", "Intermediário", TRACK_REPS, "Mantenha controle na prancha e aterrisse com joelhos alinhados."),
+    ("mountain_climber", "Mountain climber", "Funcional", "Corpo inteiro", "Core, ombros, quadríceps, flexores do quadril", "Corpo inteiro", "Peso corporal", "Iniciante", TRACK_TIME, "Mantenha ombros sobre as mãos e alterne os joelhos sem elevar o quadril."),
+
+    # Mobilidade
+    ("mobilidade_tornozelo", "Mobilidade de tornozelo", "Mobilidade", "Mobilidade", "Panturrilhas, tibial anterior", "Tornozelo", "Parede ou apoio", "Iniciante", TRACK_MOBILITY, "Leve o joelho à frente sem retirar o calcanhar do chão."),
+    ("mobilidade_quadril_90_90", "Mobilidade de quadril 90/90", "Mobilidade", "Mobilidade", "Glúteos, adutores, abdutores", "Quadril", "Peso corporal", "Iniciante", TRACK_MOBILITY, "Alterne os lados lentamente e trabalhe somente em amplitude confortável."),
+    ("rotacao_toracica", "Rotação torácica", "Mobilidade", "Mobilidade", "Costas, core, ombros", "Coluna torácica", "Peso corporal", "Iniciante", TRACK_MOBILITY, "Gire a parte alta das costas mantendo quadril e lombar controlados."),
+    ("mobilidade_ombros_bastao", "Mobilidade de ombros com bastão", "Mobilidade", "Mobilidade", "Ombros, peitoral, costas", "Ombros", "Bastão ou elástico", "Iniciante", TRACK_MOBILITY, "Use pegada ampla e atravesse somente a amplitude sem dor."),
+    ("alongamento_dinamico_posterior", "Alongamento dinâmico de posterior", "Mobilidade", "Mobilidade", "Posteriores, glúteos, panturrilhas", "Posterior de coxa", "Peso corporal", "Iniciante", TRACK_MOBILITY, "Alterne extensão e relaxamento sem movimentos bruscos ou dor."),
+    ("alongamento_flexor_quadril", "Alongamento do flexor do quadril", "Mobilidade", "Mobilidade", "Quadríceps, glúteos", "Quadril", "Peso corporal", "Iniciante", TRACK_MOBILITY, "Mantenha a pelve neutra e avance suavemente sem arquear a lombar."),
+)
+
 
 @app.after_request
 def add_security_headers(response):
@@ -351,6 +495,32 @@ def db_conn() -> sqlite3.Connection:
     return connection
 
 
+def sync_exercise_catalog(db: sqlite3.Connection) -> None:
+    """Mantém o catálogo oficial atualizado sem tocar em imagens ou vídeos."""
+    db.execute("UPDATE exercise_catalog SET active=0")
+    statement = """
+        INSERT INTO exercise_catalog(
+            catalog_key,name,modality,primary_group,secondary_muscles,
+            muscle_region,equipment,difficulty,tracking_method,description,
+            active,sort_order
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,1,?)
+        ON CONFLICT(catalog_key) DO UPDATE SET
+            name=excluded.name,
+            modality=excluded.modality,
+            primary_group=excluded.primary_group,
+            secondary_muscles=excluded.secondary_muscles,
+            muscle_region=excluded.muscle_region,
+            equipment=excluded.equipment,
+            difficulty=excluded.difficulty,
+            tracking_method=excluded.tracking_method,
+            description=excluded.description,
+            active=1,
+            sort_order=excluded.sort_order
+    """
+    for sort_order, exercise in enumerate(EXERCISE_CATALOG, start=1):
+        db.execute(statement, (*exercise, sort_order))
+
+
 def init_db() -> None:
     with db_conn() as db:
         db.executescript("""
@@ -482,8 +652,32 @@ def init_db() -> None:
             description TEXT DEFAULT '',
             image_filename TEXT DEFAULT '',
             video_url TEXT DEFAULT '',
+            catalog_key TEXT NOT NULL DEFAULT '',
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS exercise_catalog(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            catalog_key TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            modality TEXT NOT NULL,
+            primary_group TEXT NOT NULL,
+            secondary_muscles TEXT NOT NULL DEFAULT '',
+            muscle_region TEXT NOT NULL DEFAULT '',
+            equipment TEXT NOT NULL DEFAULT '',
+            difficulty TEXT NOT NULL DEFAULT 'Iniciante',
+            tracking_method TEXT NOT NULL DEFAULT 'Séries, repetições e carga',
+            description TEXT NOT NULL DEFAULT '',
+            image_filename TEXT NOT NULL DEFAULT '',
+            video_url TEXT NOT NULL DEFAULT '',
+            active INTEGER NOT NULL DEFAULT 1,
+            sort_order INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_exercise_catalog_group
+            ON exercise_catalog(primary_group,sort_order);
+        CREATE INDEX IF NOT EXISTS idx_exercise_catalog_modality
+            ON exercise_catalog(modality,sort_order);
 
         CREATE TABLE IF NOT EXISTS workouts(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -595,6 +789,31 @@ def init_db() -> None:
         food_columns = {row["name"] for row in db.execute("PRAGMA table_info(foods)").fetchall()}
         if "favorite" not in food_columns:
             db.execute("ALTER TABLE foods ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
+
+        # Migração V3.10: catálogo global classificado, sem duplicar os mesmos
+        # exercícios para cada conta e sem alterar treinos já registrados.
+        exercise_columns = {row["name"] for row in db.execute("PRAGMA table_info(exercises)").fetchall()}
+        if "catalog_key" not in exercise_columns:
+            db.execute("ALTER TABLE exercises ADD COLUMN catalog_key TEXT NOT NULL DEFAULT ''")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_exercises_catalog_key ON exercises(catalog_key)")
+        sync_exercise_catalog(db)
+        db.execute("""
+            UPDATE exercises
+               SET catalog_key=(
+                   SELECT catalog_key FROM exercise_catalog
+                    WHERE lower(exercise_catalog.name)=lower(exercises.name)
+                    LIMIT 1
+               )
+             WHERE catalog_key=''
+               AND EXISTS(
+                   SELECT 1 FROM exercise_catalog
+                    WHERE lower(exercise_catalog.name)=lower(exercises.name)
+               )
+        """)
+        db.execute("""
+            UPDATE exercises SET catalog_key='desenvolvimento_militar'
+             WHERE catalog_key='' AND lower(trim(name))='desenvolvimento'
+        """)
 
 
 init_db()
@@ -798,15 +1017,22 @@ def seed_user(db: sqlite3.Connection, user_id: int) -> None:
     ]
     db.executemany("""INSERT INTO plan_items(user_id,food_id,name,unit,daily_qty,package_qty,package_price,category,current_stock,notes)
                       VALUES(?,?,?,?,?,?,?,?,?,?)""", [(user_id,*x) for x in plan])
-    exercises = [
-        ("Agachamento livre","Pernas e glúteos","Mantenha o tronco firme, joelhos acompanhando a direção dos pés e amplitude controlada."),
-        ("Supino reto","Peito e tríceps","Escápulas apoiadas, pés firmes e barra descendo com controle até próximo ao peito."),
-        ("Remada baixa","Costas e bíceps","Puxe com os cotovelos, evite balançar o tronco e controle a volta."),
-        ("Desenvolvimento","Ombros","Mantenha abdômen contraído e evite arquear excessivamente a lombar."),
-        ("Levantamento terra romeno","Posterior de coxa","Leve o quadril para trás com coluna neutra e joelhos levemente flexionados."),
-        ("Rosca direta","Bíceps","Mantenha os cotovelos próximos ao corpo e evite impulso."),
-    ]
-    db.executemany("INSERT INTO exercises(user_id,name,muscle,description) VALUES(?,?,?,?)", [(user_id,*x) for x in exercises])
+    starter_keys = (
+        "agachamento_livre", "supino_reto", "remada_baixa",
+        "desenvolvimento_militar", "levantamento_terra_romeno", "rosca_direta",
+    )
+    for catalog_key in starter_keys:
+        exercise = db.execute(
+            "SELECT catalog_key,name,primary_group,description FROM exercise_catalog WHERE catalog_key=?",
+            (catalog_key,),
+        ).fetchone()
+        if exercise:
+            db.execute(
+                """INSERT INTO exercises(user_id,name,muscle,description,catalog_key)
+                   VALUES(?,?,?,?,?)""",
+                (user_id, exercise["name"], exercise["primary_group"],
+                 exercise["description"], exercise["catalog_key"]),
+            )
 
 
 def get_settings(db: sqlite3.Connection, user_id: int):
